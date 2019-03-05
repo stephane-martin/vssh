@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/rsa"
@@ -103,7 +102,8 @@ func main() {
 		},
 	}
 	app.Action = func(c *cli.Context) error {
-		logger, err := lib.Logger(c.GlobalString("loglevel"))
+		loglevel := c.GlobalString("loglevel")
+		logger, err := lib.Logger(loglevel)
 		if err != nil {
 			return cli.NewExitError(err.Error(), 1)
 		}
@@ -129,7 +129,6 @@ func main() {
 		if err != nil {
 			return cli.NewExitError(fmt.Sprintf("failed to read private key file: %s", err), 1)
 		}
-		privkeyb = bytes.TrimSpace(privkeyb)
 		if len(privkeyb) == 0 {
 			return cli.NewExitError("empty private key", 1)
 		}
@@ -193,7 +192,7 @@ func main() {
 		}
 		if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
 			logger.Debugw("signature success", "signed_key", signed)
-			err := Connect(rhost, sshuser, privkeyb, pubkeys, signed, c.Args(), logger)
+			err := Connect(rhost, sshuser, privkeyb, pubkeys, signed, c.Args(), loglevel == "debug", logger)
 			if err != nil {
 				return cli.NewExitError(err.Error(), 1)
 			}
@@ -215,7 +214,7 @@ func main() {
 	cli.OsExiter(0)
 }
 
-func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed string, args []string, logger *zap.SugaredLogger) error {
+func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed string, args []string, verbose bool, logger *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -225,11 +224,11 @@ func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed s
 	pubkeyPath := filepath.Join(dir, "key.pub")
 	privkeyPath := filepath.Join(dir, "key")
 	certPath := filepath.Join(dir, "key-cert.pub")
-	err = ioutil.WriteFile(pubkeyPath, []byte(pubkey), 0600)
+	err = ioutil.WriteFile(pubkeyPath, append([]byte(pubkey), '\n'), 0600)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(privkeyPath, privkey, 0600)
+	err = ioutil.WriteFile(privkeyPath, append(privkey, '\n'), 0600)
 	if err != nil {
 		return err
 	}
@@ -238,6 +237,9 @@ func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed s
 		return err
 	}
 	var allArgs []string
+	if verbose {
+		allArgs = append(allArgs, "-v")
+	}
 	allArgs = append(allArgs, "-i", privkeyPath, "-l", ruser, rhost)
 	allArgs = append(allArgs, args...)
 	cmd := exec.Command("ssh", allArgs...)
