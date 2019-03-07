@@ -214,21 +214,21 @@ func main() {
 	cli.OsExiter(0)
 }
 
-func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed string, args []string, verbose bool, logger *zap.SugaredLogger) error {
+func Connect(rhost string, ruser string, priv []byte, pub string, signed string, args []string, verb bool, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
 	}
-	logger.Debugw("using temp directory", "dirname", dir)
+	l.Debugw("using temp directory", "dirname", dir)
 	defer os.RemoveAll(dir)
 	pubkeyPath := filepath.Join(dir, "key.pub")
 	privkeyPath := filepath.Join(dir, "key")
 	certPath := filepath.Join(dir, "key-cert.pub")
-	err = ioutil.WriteFile(pubkeyPath, append([]byte(pubkey), '\n'), 0600)
+	err = ioutil.WriteFile(pubkeyPath, append([]byte(pub), '\n'), 0600)
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile(privkeyPath, append(privkey, '\n'), 0600)
+	err = ioutil.WriteFile(privkeyPath, append(priv, '\n'), 0600)
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,7 @@ func Connect(rhost string, ruser string, privkey []byte, pubkey string, signed s
 		return err
 	}
 	var allArgs []string
-	if verbose {
+	if verb {
 		allArgs = append(allArgs, "-v")
 	}
 	allArgs = append(allArgs, "-i", privkeyPath, "-l", ruser, rhost)

@@ -13,7 +13,7 @@ import (
 func Input(text string, password bool) (string, error) {
 	if password {
 		fmt.Print(text)
-		input, err := terminal.ReadPassword(int(syscall.Stdin))
+		input, err := terminal.ReadPassword(syscall.Stdin)
 		fmt.Println()
 		if err != nil {
 			return "", err

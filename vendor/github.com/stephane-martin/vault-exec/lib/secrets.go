@@ -35,52 +35,32 @@ func (e ExpiredSecretError) Error() string {
 	return fmt.Sprintf("can't renew secret %s: %s", e.Key, e.Err)
 }
 
-func GetSecrets(ctx context.Context, client *api.Client, prefix bool, upcase bool, keys []string, logger *zap.SugaredLogger, results chan map[string]string) (rerr error) {
+func GetSecrets(ctx context.Context, clt *api.Client, prefix, up, once bool, keys []string, l *zap.SugaredLogger, results chan map[string]string) (e error) {
 	g, lctx := errgroup.WithContext(ctx)
 	defer func() {
 		err := g.Wait()
-		close(results)
 		if err != nil {
-			rerr = err
+			e = err
 		}
 	}()
 
-	self, err := client.Auth().Token().RenewSelf(0)
+	self, err := clt.Auth().Token().RenewSelf(0)
 	if err != nil {
 		return fmt.Errorf("vault token lookup error: %s", err)
 	}
-	renewable, _ := self.TokenIsRenewable()
-	if renewable {
-		logger.Info("token is renewable")
-		renewer, _ := client.NewRenewer(&api.RenewerInput{
-			Secret: self,
-		})
-		g.Go(func() error {
-			renewer.Renew()
-			return nil
-		})
-		g.Go(func() error {
-			<-lctx.Done()
-			renewer.Stop()
-			return lctx.Err()
-		})
-		g.Go(func() error {
-			for {
-				select {
-				case err := <-renewer.DoneCh():
-					return TokenNotRenewedError{Err: err}
-				case renewal := <-renewer.RenewCh():
-					logger.Infow("token renewed", "at", renewal.RenewedAt.Format(time.RFC3339), "lease", renewal.Secret.LeaseDuration)
-				}
-			}
-		})
-	} else {
-		logger.Info("token is not renewable")
+	if !once {
+		renewable, _ := self.TokenIsRenewable()
+		if renewable {
+			l.Info("token is renewable")
+			renewToken(lctx, g, clt, self, l)
+		} else {
+			l.Info("token is not renewable")
+		}
 	}
 	previousResult := make(map[string]string)
 	for {
 		subg, llctx := errgroup.WithContext(lctx)
-		result, err := getSecretsHelper(llctx, subg, client, prefix, upcase, keys, logger)
+		result, err := getSecretsHelper(llctx, subg, clt, prefix, up, once, keys, l)
 		if err != nil {
 			return err
 		}
@@ -102,67 +82,40 @@ func GetSecrets(ctx context.Context, client *api.Client, prefix bool, upcase boo
 			return err
 		}
 		if e.Err != nil {
-			logger.Infow("can't renew secret", "key", e.Key, "at", time.Now().Format(time.RFC3339), "error", e.Err)
+			l.Infow("can't renew secret", "key", e.Key, "at", time.Now().Format(time.RFC3339), "error", e.Err)
 		} else {
-			logger.Infow("secret has expired", "key", e.Key, "at", time.Now().Format(time.RFC3339))
+			l.Infow("secret has expired", "key", e.Key, "at", time.Now().Format(time.RFC3339))
 		}
 	}
 }
 
-func getSecretsHelper(ctx context.Context, g *errgroup.Group, client *api.Client, prefix bool, upcase bool, keys []string, logger *zap.SugaredLogger) (map[string]string, error) {
+func getSecretsHelper(ctx context.Context, g *errgroup.Group, clt *api.Client, prefix bool, up, once bool, keys []string, l *zap.SugaredLogger) (map[string]string, error) {
 	fullResults := make(map[string]map[string]string)
-	for _, s := range keys {
-		sec := s
-		res, err := client.Logical().Read(sec)
+	for _, k := range keys {
+		secretKey := k
+		secret, err := clt.Logical().Read(secretKey)
 		if err != nil {
 			return nil, fmt.Errorf("error reading secret from vault: %s", err)
 		}
-		logger.Debugw("secret read vault vault", "key", sec)
-		fullResults[sec] = make(map[string]string)
-		for k, v := range res.Data {
+		l.Debugw("secret read vault vault", "key", secretKey)
+		fullResults[secretKey] = make(map[string]string)
+		for k, v := range secret.Data {
 			if s, ok := v.(string); ok {
-				fullResults[sec][k] = s
+				fullResults[secretKey][k] = s
 			} else if v != nil {
-				fullResults[sec][k] = fmt.Sprintf("%s", v)
+				fullResults[secretKey][k] = fmt.Sprintf("%s", v)
 			}
 		}
-		if res.Renewable {
-			logger.Infow("secret is renewable", "secret", sec)
-			renewer, _ := client.NewRenewer(&api.RenewerInput{
-				Secret: res,
-			})
-			g.Go(func() error {
-				renewer.Renew()
-				return nil
-			})
+		if once {
 			g.Go(func() error {
 				<-ctx.Done()
-				renewer.Stop()
 				return ctx.Err()
 			})
-			g.Go(func() error {
-				lease := res.LeaseDuration
-				for {
-					select {
-					case err := <-renewer.DoneCh():
-						lease = lease * 3 / 4
-						if lease == 0 {
-							return ExpiredSecretError{Err: err, Key: sec}
-						}
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-time.After(time.Duration(lease) * time.Second):
-							return ExpiredSecretError{Err: err, Key: sec}
-						}
-					case renewal := <-renewer.RenewCh():
-						lease = renewal.Secret.LeaseDuration
-						logger.Infow("secret renewed", "secret", sec, "at", renewal.RenewedAt.Format(time.RFC3339), "lease", lease)
-					}
-				}
-			})
+		} else if secret.Renewable {
+			l.Infow("secret is renewable", "secret", secretKey)
+			renewSecret(ctx, g, secret, secretKey, clt, l)
 		} else {
-			logger.Infow("secret is not renewable", "secret", sec)
+			l.Infow("secret is not renewable", "secret", secretKey)
 			g.Go(func() error {
 				<-ctx.Done()
 				return ctx.Err()
@@ -178,11 +131,73 @@ func getSecretsHelper(ctx context.Context, g *errgroup.Group, client *api.Client
 				k = secretKey + "_" + k
 			}
 			k = sanitize(k)
-			if upcase {
+			if up {
 				k = strings.ToUpper(k)
 			}
 			result[k] = v
 		}
 	}
 	return result, nil
+}
+
+func renewToken(ctx context.Context, g *errgroup.Group, clt *api.Client, token *api.Secret, l *zap.SugaredLogger) {
+	renewer, _ := clt.NewRenewer(&api.RenewerInput{
+		Secret: token,
+	})
+	g.Go(func() error {
+		renewer.Renew()
+		return nil
+	})
+	g.Go(func() error {
+		<-ctx.Done()
+		renewer.Stop()
+		return ctx.Err()
+	})
+	g.Go(func() error {
+		for {
+			select {
+			case err := <-renewer.DoneCh():
+				return TokenNotRenewedError{Err: err}
+			case renewal := <-renewer.RenewCh():
+				l.Infow("token renewed", "at", renewal.RenewedAt.Format(time.RFC3339), "lease", renewal.Secret.LeaseDuration)
+			}
+		}
+	})
+}
+
+func renewSecret(ctx context.Context, g *errgroup.Group, secret *api.Secret, secretKey string, clt *api.Client, l *zap.SugaredLogger) {
+	renewer, _ := clt.NewRenewer(&api.RenewerInput{
+		Secret: secret,
+	})
+	g.Go(func() error {
+		renewer.Renew()
+		return nil
+	})
+	g.Go(func() error {
+		<-ctx.Done()
+		renewer.Stop()
+		return ctx.Err()
+	})
+	g.Go(func() error {
+		lease := secret.LeaseDuration
+		for {
+			select {
+			case err := <-renewer.DoneCh():
+				lease = lease * 3 / 4
+				if lease == 0 {
+					return ExpiredSecretError{Err: err, Key: secretKey}
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(time.Duration(lease) * time.Second):
+					return ExpiredSecretError{Err: err, Key: secretKey}
+				}
+			case renewal := <-renewer.RenewCh():
+				lease = renewal.Secret.LeaseDuration
+				l.Infow("secret renewed", "secret", secretKey, "at", renewal.RenewedAt.Format(time.RFC3339), "lease", lease)
+			}
+		}
+	})
+
 }

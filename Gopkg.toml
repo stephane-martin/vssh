@@ -1,6 +1,6 @@
 [[constraint]]
   name = "github.com/stephane-martin/vault-exec"
-  branch = "master"
+  version = "0.1.2"
 
 [[constraint]]
   name = "github.com/urfave/cli"
