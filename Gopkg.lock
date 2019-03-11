@@ -2,6 +2,33 @@
 
 
 [[projects]]
+  branch = "master"
+  digest = "1:6da51e5ec493ad2b44cb04129e2d0a068c8fb9bd6cb5739d199573558696bb94"
+  name = "github.com/Azure/go-ansiterm"
+  packages = [
+    ".",
+    "winterm",
+  ]
+  pruneopts = "UT"
+  revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
+
+[[projects]]
+  digest = "1:87c2e02fb01c27060ccc5ba7c5a407cc91147726f8f40b70cceeedbc52b1f3a8"
+  name = "github.com/Sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "e1e72e9de974bd926e5c56f83753fba2df402ce5"
+  version = "v1.3.0"
+
+[[projects]]
+  digest = "1:94d96b283e7cee29db1b0a36135e6ad9e8584f8f03155ddaf418984ec4de707a"
+  name = "github.com/docker/docker"
+  packages = ["pkg/term/windows"]
+  pruneopts = "UT"
+  revision = "092cba3727bb9b4a2f0e922cd6c0f93ea270e363"
+  version = "v1.13.1"
+
+[[projects]]
   digest = "1:e4f5819333ac698d294fe04dbf640f84719658d5c7ce195b10060cc37292ce79"
   name = "github.com/golang/snappy"
   packages = ["."]
@@ -92,6 +119,14 @@
   version = "v1.0.3"
 
 [[projects]]
+  digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
+  name = "github.com/konsorten/go-windows-terminal-sequences"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
+  version = "v1.0.2"
+
+[[projects]]
   digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
   name = "github.com/mitchellh/go-homedir"
   packages = ["."]
@@ -106,6 +141,14 @@
   pruneopts = "UT"
   revision = "3536a929edddb9a5b34bd6861dc4a9647cb459fe"
   version = "v1.1.2"
+
+[[projects]]
+  digest = "1:0fd364cae8f486496f036edb44e322ffb4523fbb6ad1404d512623181fdff6c1"
+  name = "github.com/moby/moby"
+  packages = ["pkg/term"]
+  pruneopts = "UT"
+  revision = "eef6495eddab52828327aade186443681ed71a4e"
+  version = "v17.03.2-ce-rc1"
 
 [[projects]]
   digest = "1:d4c88b5ad20151a96c1e5a55547a944b6af623aa315f69ee0d172b00f95d27fb"
@@ -125,6 +168,14 @@
   pruneopts = "UT"
   revision = "51a8f68e6c24dc43f1e371749c89a267de4ebc53"
   version = "v1.0.0"
+
+[[projects]]
+  digest = "1:1fbe1a6270175a7262b04be06b7ed4bb52b8eb9521694e0386e4f81f7a7dae20"
+  name = "github.com/stephane-martin/golang-ssh"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "fd73d96a6ab5d286cd6fc84de264890e1fd31a24"
+  version = "v0.2.0"
 
 [[projects]]
   digest = "1:ae479c48c8dcdf6dfad015efb8fc588ce68e6d0b81f7385a5f7f04ae00c740fd"
@@ -175,7 +226,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5b1e3560b10bebafefcafa45db8cb121bfa1994b1503997b8b46631c2540e79a"
+  digest = "1:208e8447740965c8afc549f7faafc469f2b159c8a9b20933824e7853e5573950"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -185,6 +236,7 @@
     "internal/subtle",
     "poly1305",
     "ssh",
+    "ssh/knownhosts",
     "ssh/terminal",
   ]
   pruneopts = "UT"
@@ -259,11 +311,13 @@
   analyzer-version = 1
   input-imports = [
     "github.com/mitchellh/go-homedir",
+    "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
     "github.com/urfave/cli",
     "go.uber.org/zap",
     "golang.org/x/crypto/ed25519",
     "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/knownhosts",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

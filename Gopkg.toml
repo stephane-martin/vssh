@@ -14,6 +14,10 @@
   name = "golang.org/x/crypto"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/stephane-martin/golang-ssh"
+  version = "0.2.0"
+
 [prune]
   go-tests = true
   unused-packages = true

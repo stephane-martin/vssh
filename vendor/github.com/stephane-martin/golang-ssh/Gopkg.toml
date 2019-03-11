@@ -1,0 +1,11 @@
+[[constraint]]
+  name = "github.com/moby/moby"
+  version = "17.03.2-ce"  
+
+[[constraint]]
+  name = "golang.org/x/crypto"
+  branch = "master"
+
+[prune]
+  go-tests = true
+  unused-packages = true

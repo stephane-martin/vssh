@@ -1,15 +1,11 @@
 package main
 
 import (
-	"crypto/dsa"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strings"
@@ -19,8 +15,6 @@ import (
 	"github.com/stephane-martin/vault-exec/lib"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/ed25519"
-	"golang.org/x/crypto/ssh"
 )
 
 var Version string
@@ -63,7 +57,7 @@ func main() {
 			EnvVar: "VAULT_USERNAME",
 		},
 		cli.StringFlag{
-			Name:   "password,P",
+			Name:   "password,W",
 			Usage:  "Vault password or SecretID",
 			Value:  "",
 			EnvVar: "VAULT_PASSWORD",
@@ -83,6 +77,12 @@ func main() {
 			Usage:  "SSH remote host",
 			EnvVar: "RHOST",
 		},
+		cli.IntFlag{
+			Name:   "sshport,rport,port,P",
+			Usage:  "SSH remote port",
+			EnvVar: "RPORT",
+			Value:  22,
+		},
 		cli.StringFlag{
 			Name:   "privkey,private,identity,i",
 			Usage:  "path to the SSH public key to be signed",
@@ -100,107 +100,19 @@ func main() {
 			Usage:  "Vault signing role",
 			EnvVar: "ROLE",
 		},
+		cli.BoolFlag{
+			Name:   "insecure",
+			Usage:  "do not check the remote SSH host key",
+			EnvVar: "VSSH_INSECURE",
+		},
+		cli.BoolFlag{
+			Name:   "native",
+			Usage:  "use the native SSH client instead of the builtin one",
+			EnvVar: "VSSH_NATIVE",
+		},
 	}
-	app.Action = func(c *cli.Context) error {
-		loglevel := c.GlobalString("loglevel")
-		logger, err := lib.Logger(loglevel)
-		if err != nil {
-			return cli.NewExitError(err.Error(), 1)
-		}
-		defer logger.Sync()
 
-		privkeyPath := c.GlobalString("privkey")
-		if privkeyPath == "" {
-			p, err := homedir.Expand("~/.ssh/id_rsa")
-			if err != nil {
-				return cli.NewExitError(err.Error(), 1)
-			}
-			privkeyPath = p
-		}
-		infos, err := os.Stat(privkeyPath)
-		if err != nil {
-			return cli.NewExitError(err.Error(), 1)
-		}
-		if !infos.Mode().IsRegular() {
-			return cli.NewExitError("privkey is not a regular file", 1)
-		}
-
-		privkeyb, err := ioutil.ReadFile(privkeyPath)
-		if err != nil {
-			return cli.NewExitError(fmt.Sprintf("failed to read private key file: %s", err), 1)
-		}
-		if len(privkeyb) == 0 {
-			return cli.NewExitError("empty private key", 1)
-		}
-		pubkey, err := DerivePublicKey(privkeyb)
-		if err != nil {
-			return cli.NewExitError(fmt.Sprintf("error extracting public key: %s", err), 1)
-		}
-		pubkeys := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
-
-		sshMountPoint := c.GlobalString("mountpoint")
-		if sshMountPoint == "" {
-			return cli.NewExitError("empty SSH mount point", 1)
-		}
-
-		rhost := c.GlobalString("sshhost")
-		if rhost == "" {
-			return cli.NewExitError("empty remote host", 1)
-		}
-
-		role := c.GlobalString("role")
-		if role == "" {
-			return cli.NewExitError("empty SSH role", 1)
-		}
-
-		authType := strings.ToLower(c.GlobalString("method"))
-		path := strings.TrimSpace(c.GlobalString("path"))
-		if path == "" {
-			path = authType
-		}
-		os.Unsetenv("VAULT_ADDR")
-
-		client, err := lib.Auth(authType, c.GlobalString("address"), path, c.GlobalString("token"), c.GlobalString("username"), c.GlobalString("password"), logger)
-		if err != nil {
-			return cli.NewExitError(fmt.Sprintf("auth failed: %s", err), 1)
-		}
-
-		err = lib.CheckHealth(client)
-		if err != nil {
-			return cli.NewExitError(fmt.Sprintf("vault health check error: %s", err), 1)
-		}
-		sshuser := c.GlobalString("sshuser")
-		if sshuser == "" {
-			u, err := user.Current()
-			if err != nil {
-				return cli.NewExitError(err.Error(), 1)
-			}
-			sshuser = u.Username
-		}
-		logger.Debugw("vssh", "rhost", rhost, "ruser", sshuser, "privkey", privkeyPath, "role", role, "ssh_mount_point", sshMountPoint)
-		data := map[string]interface{}{
-			"valid_principals": sshuser,
-			"public_key":       pubkeys,
-			"cert_type":        "user",
-		}
-		logger.Debugw("public key to be signed", "pubkey", pubkeys)
-		sshc := client.SSH()
-		sshc.MountPoint = sshMountPoint
-		sec, err := sshc.SignKey(role, data)
-		if err != nil {
-			return cli.NewExitError(fmt.Sprintf("signing error: %s", err), 1)
-		}
-		if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
-			logger.Debugw("signature success", "signed_key", signed)
-			err := Connect(rhost, sshuser, privkeyb, pubkeys, signed, c.Args(), loglevel == "debug", logger)
-			if err != nil {
-				return cli.NewExitError(err.Error(), 1)
-			}
-		} else {
-			return cli.NewExitError("signature has failed", 1)
-		}
-		return nil
-	}
+	app.Action = VSSH
 
 	cli.OsExiter = func(code int) {
 		os.Stdout.Sync()
@@ -210,11 +122,134 @@ func main() {
 			os.Exit(code)
 		}
 	}
+
 	_ = app.Run(os.Args)
 	cli.OsExiter(0)
 }
 
-func Connect(rhost string, ruser string, priv []byte, pub string, signed string, args []string, verb bool, l *zap.SugaredLogger) error {
+func VSSH(c *cli.Context) (e error) {
+	defer func() {
+		if e != nil {
+			e = cli.NewExitError(e.Error(), 1)
+		}
+	}()
+	loglevel := c.GlobalString("loglevel")
+	logger, err := lib.Logger(loglevel)
+	if err != nil {
+		return err
+	}
+	defer logger.Sync()
+
+	privkeyPath := c.GlobalString("privkey")
+	if privkeyPath == "" {
+		p, err := homedir.Expand("~/.ssh/id_rsa")
+		if err != nil {
+			return err
+		}
+		privkeyPath = p
+	}
+	infos, err := os.Stat(privkeyPath)
+	if err != nil {
+		return err
+	}
+	if !infos.Mode().IsRegular() {
+		return errors.New("privkey is not a regular file")
+	}
+
+	privkeyb, err := ioutil.ReadFile(privkeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read private key file: %s", err)
+	}
+	if len(privkeyb) == 0 {
+		return errors.New("empty private key")
+	}
+	pubkey, err := DerivePublicKey(privkeyb)
+	if err != nil {
+		return fmt.Errorf("error extracting public key: %s", err)
+	}
+	pubkeys := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
+
+	sshMountPoint := c.GlobalString("mountpoint")
+	if sshMountPoint == "" {
+		return errors.New("empty SSH mount point")
+	}
+
+	rhost := c.GlobalString("sshhost")
+	if rhost == "" {
+		return errors.New("empty remote host")
+	}
+
+	role := c.GlobalString("role")
+	if role == "" {
+		return errors.New("empty SSH role")
+	}
+
+	authType := strings.ToLower(c.GlobalString("method"))
+	path := strings.TrimSpace(c.GlobalString("path"))
+	if path == "" {
+		path = authType
+	}
+	os.Unsetenv("VAULT_ADDR")
+
+	address := c.GlobalString("address")
+	token := c.GlobalString("token")
+	username := c.GlobalString("username")
+	password := c.GlobalString("password")
+	insecure := c.GlobalBool("insecure")
+	port := c.GlobalInt("port")
+	native := c.GlobalBool("native")
+
+	client, err := lib.Auth(authType, address, path, token, username, password, logger)
+	if err != nil {
+		return fmt.Errorf("auth failed: %s", err)
+	}
+	err = lib.CheckHealth(client)
+	if err != nil {
+		return fmt.Errorf("vault health check error: %s", err)
+	}
+	sshuser := c.GlobalString("sshuser")
+	if sshuser == "" {
+		u, err := user.Current()
+		if err != nil {
+			return err
+		}
+		sshuser = u.Username
+	}
+	logger.Debugw(
+		"vssh",
+		"rhost", rhost,
+		"ruser", sshuser,
+		"privkey", privkeyPath,
+		"role", role,
+		"ssh_mount_point", sshMountPoint,
+	)
+	data := map[string]interface{}{
+		"valid_principals": sshuser,
+		"public_key":       pubkeys,
+		"cert_type":        "user",
+	}
+	logger.Debugw("public key to be signed", "pubkey", pubkeys)
+	sshc := client.SSH()
+	sshc.MountPoint = sshMountPoint
+	sec, err := sshc.SignKey(role, data)
+	if err != nil {
+		return fmt.Errorf("signing error: %s", err)
+	}
+	if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
+		logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
+		verbose := loglevel == "debug"
+		err := Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, c.Args(), verbose, insecure, native, logger)
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.New("signature has failed")
+	}
+	return nil
+
+}
+
+func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, args []string, verb, insecure, native bool, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -228,43 +263,22 @@ func Connect(rhost string, ruser string, priv []byte, pub string, signed string,
 	if err != nil {
 		return err
 	}
+	// TODO: remove temp files as soon as possible
+	defer os.Remove(pubkeyPath)
 	err = ioutil.WriteFile(privkeyPath, append(priv, '\n'), 0600)
 	if err != nil {
 		return err
 	}
+	defer os.Remove(privkeyPath)
 	err = ioutil.WriteFile(certPath, []byte(signed), 0600)
 	if err != nil {
 		return err
 	}
-	var allArgs []string
-	if verb {
-		allArgs = append(allArgs, "-v")
+	defer os.Remove(certPath)
+	if native {
+		l.Debugw("native SSH client")
+		return Native(privkeyPath, ruser, rhost, port, args, verb, insecure)
 	}
-	allArgs = append(allArgs, "-i", privkeyPath, "-l", ruser, rhost)
-	allArgs = append(allArgs, args...)
-	cmd := exec.Command("ssh", allArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func DerivePublicKey(privkeyb []byte) (ssh.PublicKey, error) {
-	// newpublickey: *dsa.PrivateKey, *ecdsa.PublicKey, *dsa.PublicKey, ed25519.PublicKey
-	p, err := ssh.ParseRawPrivateKey(privkeyb)
-	if err != nil {
-		return nil, err
-	}
-	switch pk := p.(type) {
-	case *dsa.PrivateKey:
-		return ssh.NewPublicKey(&pk.PublicKey)
-	case *rsa.PrivateKey:
-		return ssh.NewPublicKey(&pk.PublicKey)
-	case *ecdsa.PrivateKey:
-		return ssh.NewPublicKey(&pk.PublicKey)
-	case *ed25519.PrivateKey:
-		return ssh.NewPublicKey(pk.Public().(ed25519.PublicKey))
-	default:
-		return nil, errors.New("unknown private key format")
-	}
+	l.Debugw("builtin SSH client")
+	return GoSSH(privkeyPath, certPath, ruser, rhost, port, args, verb, insecure, l)
 }
