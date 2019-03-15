@@ -25,6 +25,9 @@ ${BINARY}: ${SOURCES}
 	dep ensure
 	CGO_ENABLED=0 go build -a -installsuffix nocgo -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
 
+README.md: docs/README.rst
+	pandoc -f rst -t gfm -o README.md docs/README.rst
+
 clean:
 	rm -f ${BINARY} ${BINARY}_debug
 
