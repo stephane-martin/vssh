@@ -7,7 +7,7 @@ SOURCES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
 BINARY=vssh
 FULL=github.com/stephane-martin/vssh
-VERSION=0.1.0
+VERSION=0.1.1
 LDFLAGS=-ldflags '-X main.Version=${VERSION}'
 LDFLAGS_RELEASE=-ldflags '-w -s -X main.Version=${VERSION}'
 
