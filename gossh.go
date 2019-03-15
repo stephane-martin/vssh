@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
-	"os"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
@@ -15,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func GoSSH(privkeyPath, certPath, ruser, rhost string, port int, args []string, verbose, insecure bool, l *zap.SugaredLogger) error {
+func GoSSH(privkeyPath, certPath, ruser, rhost string, port int, args []string, verbose, insecure, force bool, l *zap.SugaredLogger) error {
 	auth, err := gssh.AuthCertFile(privkeyPath, certPath)
 	if err != nil {
 		return err
@@ -46,18 +44,13 @@ func GoSSH(privkeyPath, certPath, ruser, rhost string, port int, args []string, 
 		}
 	}
 	client := gssh.NewClient(cfg)
-	if len(args) == 0 {
-		return client.Shell()
+	if len(args) == 0 || force {
+		return client.Shell(args...)
 	}
-	stdout, stderr, err := client.Start(strings.Join(args, " "))
+	output, err := client.OutputWithPty(strings.Join(args, " "))
+	fmt.Println(output)
 	if err != nil {
-		return fmt.Errorf("failed to start command: %s", err)
+		return fmt.Errorf("failed to execute command: %s", err)
 	}
-	go func() {
-		io.Copy(os.Stdout, stdout)
-	}()
-	go func() {
-		io.Copy(os.Stderr, stderr)
-	}()
-	return client.Wait()
+	return nil
 }

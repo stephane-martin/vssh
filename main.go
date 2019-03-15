@@ -27,40 +27,51 @@ func main() {
 	app.Version = Version
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:   "address,vault-addr,addr",
+			Name:   "vault-address,vault-addr",
 			Value:  "http://127.0.0.1:8200",
 			EnvVar: "VAULT_ADDR",
 			Usage:  "The address of the Vault server",
 		},
 		cli.StringFlag{
-			Name:   "token,t",
+			Name:   "vault-token,token",
 			Value:  "",
 			EnvVar: "VAULT_TOKEN",
 			Usage:  "Vault authentication token",
 		},
 		cli.StringFlag{
-			Name:   "method,meth",
+			Name:   "vault-method,method",
 			Usage:  "type of authentication",
 			Value:  "token",
 			EnvVar: "VAULT_AUTH_METHOD",
 		},
 		cli.StringFlag{
-			Name:   "path",
+			Name:   "vault-auth-path,path",
 			Usage:  "remote path in Vault where the chosen auth method is mounted",
 			Value:  "",
 			EnvVar: "VAULT_AUTH_PATH",
 		},
 		cli.StringFlag{
-			Name:   "username,U",
+			Name:   "vault-username,U",
 			Usage:  "Vault username or RoleID",
 			Value:  "",
 			EnvVar: "VAULT_USERNAME",
 		},
 		cli.StringFlag{
-			Name:   "password,W",
+			Name:   "vault-password,P",
 			Usage:  "Vault password or SecretID",
 			Value:  "",
 			EnvVar: "VAULT_PASSWORD",
+		},
+		cli.StringFlag{
+			Name:   "vault-sshmount,mount,m",
+			Usage:  "Vault SSH signer mount point",
+			EnvVar: "VSSH_SSH_MOUNT",
+			Value:  "ssh-client-signer",
+		},
+		cli.StringFlag{
+			Name:   "vault-sshrole,role",
+			Usage:  "Vault signing role",
+			EnvVar: "VSSH_SIGNING_ROLE",
 		},
 		cli.StringFlag{
 			Name:  "loglevel",
@@ -68,19 +79,19 @@ func main() {
 			Value: "info",
 		},
 		cli.StringFlag{
-			Name:   "sshuser,u",
+			Name:   "login_name,ssh-user,l",
 			Usage:  "SSH remote user",
-			EnvVar: "USER",
+			EnvVar: "SSH_USER",
 		},
 		cli.StringFlag{
-			Name:   "sshhost,rhost,host,H",
+			Name:   "ssh-host,H",
 			Usage:  "SSH remote host",
-			EnvVar: "RHOST",
+			EnvVar: "SSH_HOST",
 		},
 		cli.IntFlag{
-			Name:   "sshport,rport,port,P",
+			Name:   "ssh-port,p",
 			Usage:  "SSH remote port",
-			EnvVar: "RPORT",
+			EnvVar: "SSH_PORT",
 			Value:  22,
 		},
 		cli.StringFlag{
@@ -88,17 +99,6 @@ func main() {
 			Usage:  "path to the SSH public key to be signed",
 			EnvVar: "IDENTITY",
 			Value:  "",
-		},
-		cli.StringFlag{
-			Name:   "mountpoint,m",
-			Usage:  "vault SSH mount point",
-			EnvVar: "SIGNER",
-			Value:  "ssh-client-signer",
-		},
-		cli.StringFlag{
-			Name:   "role,r",
-			Usage:  "Vault signing role",
-			EnvVar: "ROLE",
 		},
 		cli.BoolFlag{
 			Name:   "insecure",
@@ -109,6 +109,11 @@ func main() {
 			Name:   "native",
 			Usage:  "use the native SSH client instead of the builtin one",
 			EnvVar: "VSSH_NATIVE",
+		},
+		cli.BoolFlag{
+			Name:   "t",
+			Usage:  "force pseudo-terminal allocation",
+			EnvVar: "VSSH_FORCE_PSEUDO",
 		},
 	}
 
@@ -169,35 +174,36 @@ func VSSH(c *cli.Context) (e error) {
 	}
 	pubkeys := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
 
-	sshMountPoint := c.GlobalString("mountpoint")
+	sshMountPoint := c.GlobalString("vault-sshmount")
 	if sshMountPoint == "" {
 		return errors.New("empty SSH mount point")
 	}
 
-	rhost := c.GlobalString("sshhost")
+	rhost := c.GlobalString("ssh-host")
 	if rhost == "" {
 		return errors.New("empty remote host")
 	}
 
-	role := c.GlobalString("role")
+	role := c.GlobalString("vault-sshrole")
 	if role == "" {
 		return errors.New("empty SSH role")
 	}
 
-	authType := strings.ToLower(c.GlobalString("method"))
-	path := strings.TrimSpace(c.GlobalString("path"))
+	authType := strings.ToLower(c.GlobalString("vault-method"))
+	path := strings.TrimSpace(c.GlobalString("vault-auth-path"))
 	if path == "" {
 		path = authType
 	}
 	os.Unsetenv("VAULT_ADDR")
 
-	address := c.GlobalString("address")
-	token := c.GlobalString("token")
-	username := c.GlobalString("username")
-	password := c.GlobalString("password")
+	address := c.GlobalString("vault-addr")
+	token := c.GlobalString("vault-token")
+	username := c.GlobalString("vault-username")
+	password := c.GlobalString("vault-password")
 	insecure := c.GlobalBool("insecure")
-	port := c.GlobalInt("port")
+	port := c.GlobalInt("ssh-port")
 	native := c.GlobalBool("native")
+	forceTerminal := c.GlobalBool("t")
 
 	client, err := lib.Auth(authType, address, path, token, username, password, logger)
 	if err != nil {
@@ -207,7 +213,7 @@ func VSSH(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("vault health check error: %s", err)
 	}
-	sshuser := c.GlobalString("sshuser")
+	sshuser := c.GlobalString("login_name")
 	if sshuser == "" {
 		u, err := user.Current()
 		if err != nil {
@@ -238,7 +244,7 @@ func VSSH(c *cli.Context) (e error) {
 	if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
 		logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
 		verbose := loglevel == "debug"
-		err := Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, c.Args(), verbose, insecure, native, logger)
+		err := Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, c.Args(), verbose, insecure, native, forceTerminal, logger)
 		if err != nil {
 			return err
 		}
@@ -249,7 +255,7 @@ func VSSH(c *cli.Context) (e error) {
 
 }
 
-func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, args []string, verb, insecure, native bool, l *zap.SugaredLogger) error {
+func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, args []string, verb, insecure, native, force bool, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -277,8 +283,8 @@ func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, arg
 	defer os.Remove(certPath)
 	if native {
 		l.Debugw("native SSH client")
-		return Native(privkeyPath, ruser, rhost, port, args, verb, insecure)
+		return Native(privkeyPath, ruser, rhost, port, args, verb, insecure, force, l)
 	}
 	l.Debugw("builtin SSH client")
-	return GoSSH(privkeyPath, certPath, ruser, rhost, port, args, verb, insecure, l)
+	return GoSSH(privkeyPath, certPath, ruser, rhost, port, args, verb, insecure, force, l)
 }
