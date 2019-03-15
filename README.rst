@@ -2,7 +2,7 @@
 vssh
 ====
 
-:Author: Stephane Martin
+:Author: Stephane Martin <stephane.martin_github@vesperal.eu>
 
 .. contents::
    :depth: 1
@@ -86,8 +86,8 @@ vault signing role
 -  **--role** ``myrole``: the name of the SSH signing role you have configured
    in Vault
 
-Examples
+examples
 ========
 
-Questions
+questions
 =========

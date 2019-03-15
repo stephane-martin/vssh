@@ -1,6 +1,6 @@
 .POSIX:
 .SUFFIXES:
-.PHONY: debug release vet clean version install_vendor
+.PHONY: debug release vet clean version install_vendor edit
 .SILENT: version 
 
 SOURCES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
@@ -25,8 +25,14 @@ ${BINARY}: ${SOURCES}
 	dep ensure
 	CGO_ENABLED=0 go build -a -installsuffix nocgo -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
 
-README.md: docs/README.rst
-	pandoc -f rst -t gfm -o README.md docs/README.rst
+README.rst: docs/README.rst
+	pandoc -s --toc --toc-depth=1 --wrap=auto --columns=80 --number-sections --from rst --to rst -o README.rst docs/README.rst
+
+edit:
+	nohup restview docs/README.rst >/dev/null &
+	nvim docs/README.rst	
+	pkill restview
+	pandoc -s --toc --toc-depth=1 --wrap=auto --columns=80 --number-sections --from rst --to rst -o README.rst docs/README.rst
 
 clean:
 	rm -f ${BINARY} ${BINARY}_debug
