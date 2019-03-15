@@ -23,7 +23,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "vssh"
 	app.Usage = "SSH to remote server using certificate signed by vault"
-	app.UsageText = "vault-ssh [options] [cmd-to-execute]"
+	app.UsageText = "vault-ssh [options] host [cmd-to-execute]"
 	app.Version = Version
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -83,11 +83,6 @@ func main() {
 			Usage:  "SSH remote user",
 			EnvVar: "SSH_USER",
 		},
-		cli.StringFlag{
-			Name:   "ssh-host,H",
-			Usage:  "SSH remote host",
-			EnvVar: "SSH_HOST",
-		},
 		cli.IntFlag{
 			Name:   "ssh-port,p",
 			Usage:  "SSH remote port",
@@ -145,6 +140,23 @@ func VSSH(c *cli.Context) (e error) {
 	}
 	defer logger.Sync()
 
+	args := c.Args()
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, c.App.UsageText)
+		return errors.New("no host provided")
+	}
+	rhost := strings.TrimSpace(args[0])
+	if rhost == "" {
+		return errors.New("empty host")
+	}
+	spl := strings.SplitN(rhost, "@", 2)
+	sshuser := ""
+	if len(spl) == 2 {
+		sshuser = spl[0]
+		rhost = spl[1]
+	}
+	commands := args[1:]
+
 	privkeyPath := c.GlobalString("privkey")
 	if privkeyPath == "" {
 		p, err := homedir.Expand("~/.ssh/id_rsa")
@@ -179,11 +191,6 @@ func VSSH(c *cli.Context) (e error) {
 		return errors.New("empty SSH mount point")
 	}
 
-	rhost := c.GlobalString("ssh-host")
-	if rhost == "" {
-		return errors.New("empty remote host")
-	}
-
 	role := c.GlobalString("vault-sshrole")
 	if role == "" {
 		return errors.New("empty SSH role")
@@ -213,28 +220,35 @@ func VSSH(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("vault health check error: %s", err)
 	}
-	sshuser := c.GlobalString("login_name")
+
 	if sshuser == "" {
-		u, err := user.Current()
-		if err != nil {
-			return err
+		sshuser = c.GlobalString("login_name")
+		if sshuser == "" {
+			u, err := user.Current()
+			if err != nil {
+				return err
+			}
+			sshuser = u.Username
 		}
-		sshuser = u.Username
 	}
+
 	logger.Debugw(
 		"vssh",
-		"rhost", rhost,
-		"ruser", sshuser,
+		"ssh-host", rhost,
+		"ssh-user", sshuser,
 		"privkey", privkeyPath,
-		"role", role,
-		"ssh_mount_point", sshMountPoint,
+		"vault-ssh-role", role,
+		"vault-ssh-mount-point", sshMountPoint,
 	)
+
 	data := map[string]interface{}{
 		"valid_principals": sshuser,
 		"public_key":       pubkeys,
 		"cert_type":        "user",
 	}
+
 	logger.Debugw("public key to be signed", "pubkey", pubkeys)
+
 	sshc := client.SSH()
 	sshc.MountPoint = sshMountPoint
 	sec, err := sshc.SignKey(role, data)
@@ -244,15 +258,9 @@ func VSSH(c *cli.Context) (e error) {
 	if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
 		logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
 		verbose := loglevel == "debug"
-		err := Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, c.Args(), verbose, insecure, native, forceTerminal, logger)
-		if err != nil {
-			return err
-		}
-	} else {
-		return errors.New("signature has failed")
+		return Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, commands, verbose, insecure, native, forceTerminal, logger)
 	}
-	return nil
-
+	return errors.New("signature has failed")
 }
 
 func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, args []string, verb, insecure, native, force bool, l *zap.SugaredLogger) error {

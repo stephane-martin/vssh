@@ -49,7 +49,6 @@ SSH connection
 --------------
 
 * **--ssh-user** ``myuser``: connect to remote SSH server with user myuser
-* **--ssh-host** ``myhost``: connect to remote SSH hist myhost
 * **--ssh-port** ``22``: SSH server remote port
 * **--insecure**: if specified, do not check SSH known hosts
 * **--native**: if specified, use the native ssh binary instead of the embedded Go SSH client
