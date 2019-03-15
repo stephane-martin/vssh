@@ -13,7 +13,7 @@ vssh
 introduction
 ============
 
-vssh is an SSH client that uses Hashicorp's vault to authenticate using SSH
+``vssh`` is an SSH client that uses Hashicorp's vault to authenticate using SSH
 certificates.
 
 How it works:
@@ -56,9 +56,9 @@ instead. Check ``vssh --help`` for details.
 SSH connection
 --------------
 
--  **--sshuser** myuser: connect to remote SSH server with user myuser
--  **--sshhost** myhost: connect to remote SSH hist myhost
--  **--sshport** 22: SSH server remote port
+-  **--sshuser** ``myuser``: connect to remote SSH server with user myuser
+-  **--sshhost** ``myhost``: connect to remote SSH hist myhost
+-  **--sshport** ``22``: SSH server remote port
 -  **--insecure**: if specified, do not check SSH known hosts
 -  **--native**: if specified, use the native ssh binary instead of the embedded
    Go SSH client
@@ -66,25 +66,25 @@ SSH connection
 private key
 -----------
 
--  **--privkey** id_rsa: use the given private key to be signed by vault
+-  **--privkey** ``id_rsa``: use the given private key to be signed by vault
 
 vault connection
 ----------------
 
--  **--vault-addr** http://127.0.0.1:8200: vault connection URL
--  **--method** userpass: vault authentication method (token, userpass, ldap,
-   approle)
--  **--token**: which token to use with token auth
--  **--path** custom: useful if the Vault authentication method is mounted to a
-   custom path
--  **--username** myvaultuser: username for userpass auth
--  **--password** myvaultpass: password for userpass auth
+-  **--vault-addr** ``http://127.0.0.1:8200``: vault connection URL
+-  **--method** ``userpass``: vault authentication method (token, userpass,
+   ldap, approle)
+-  **--token** ``tok``: which token to use with token auth
+-  **--path** ``custompath``: useful if the Vault authentication method is
+   mounted to a custom path
+-  **--username** ``myvaultuser``: username for userpass auth
+-  **--password** ``myvaultpass``: password for userpass auth
 
 vault signing role
 ------------------
 
--  **--role** myrole: the name of the SSH signing role you have configured in
-   Vault
+-  **--role** ``myrole``: the name of the SSH signing role you have configured
+   in Vault
 
 Examples
 ========
