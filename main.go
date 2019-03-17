@@ -133,39 +133,44 @@ func VSSH(c *cli.Context) (e error) {
 			e = cli.NewExitError(e.Error(), 1)
 		}
 	}()
-	loglevel := c.GlobalString("loglevel")
+
+	var vaultParams VaultParams
+	var sshParams SSHParams
+
+	loglevel := strings.ToLower(c.GlobalString("loglevel"))
 	logger, err := lib.Logger(loglevel)
 	if err != nil {
 		return err
 	}
 	defer logger.Sync()
+	sshParams.Verbose = loglevel == "debug"
 
 	args := c.Args()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, c.App.UsageText)
 		return errors.New("no host provided")
 	}
-	rhost := strings.TrimSpace(args[0])
-	if rhost == "" {
+
+	sshParams.Host = strings.TrimSpace(args[0])
+	if sshParams.Host == "" {
 		return errors.New("empty host")
 	}
-	spl := strings.SplitN(rhost, "@", 2)
-	sshuser := ""
+	spl := strings.SplitN(sshParams.Host, "@", 2)
 	if len(spl) == 2 {
-		sshuser = spl[0]
-		rhost = spl[1]
+		sshParams.LoginName = spl[0]
+		sshParams.Host = spl[1]
 	}
-	commands := args[1:]
+	sshParams.Commands = args[1:]
 
-	privkeyPath := c.GlobalString("privkey")
-	if privkeyPath == "" {
+	sshParams.PrivateKeyPath = c.GlobalString("privkey")
+	if sshParams.PrivateKeyPath == "" {
 		p, err := homedir.Expand("~/.ssh/id_rsa")
 		if err != nil {
 			return err
 		}
-		privkeyPath = p
+		sshParams.PrivateKeyPath = p
 	}
-	infos, err := os.Stat(privkeyPath)
+	infos, err := os.Stat(sshParams.PrivateKeyPath)
 	if err != nil {
 		return err
 	}
@@ -173,7 +178,7 @@ func VSSH(c *cli.Context) (e error) {
 		return errors.New("privkey is not a regular file")
 	}
 
-	privkeyb, err := ioutil.ReadFile(privkeyPath)
+	privkeyb, err := ioutil.ReadFile(sshParams.PrivateKeyPath)
 	if err != nil {
 		return fmt.Errorf("failed to read private key file: %s", err)
 	}
@@ -184,35 +189,46 @@ func VSSH(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("error extracting public key: %s", err)
 	}
-	pubkeys := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
+	pubkeyStr := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
 
-	sshMountPoint := c.GlobalString("vault-sshmount")
-	if sshMountPoint == "" {
+	vaultParams.SSHMount = c.GlobalString("vault-sshmount")
+	if vaultParams.SSHMount == "" {
 		return errors.New("empty SSH mount point")
 	}
 
-	role := c.GlobalString("vault-sshrole")
-	if role == "" {
+	vaultParams.SSHRole = c.GlobalString("vault-sshrole")
+	if vaultParams.SSHRole == "" {
 		return errors.New("empty SSH role")
 	}
 
-	authType := strings.ToLower(c.GlobalString("vault-method"))
-	path := strings.TrimSpace(c.GlobalString("vault-auth-path"))
-	if path == "" {
-		path = authType
+	vaultParams.AuthMethod = strings.ToLower(c.GlobalString("vault-method"))
+	if vaultParams.AuthMethod == "" {
+		vaultParams.AuthMethod = "token"
+	}
+	vaultParams.AuthPath = strings.TrimSpace(c.GlobalString("vault-auth-path"))
+	if vaultParams.AuthPath == "" {
+		vaultParams.AuthPath = vaultParams.AuthMethod
 	}
 	os.Unsetenv("VAULT_ADDR")
 
-	address := c.GlobalString("vault-addr")
-	token := c.GlobalString("vault-token")
-	username := c.GlobalString("vault-username")
-	password := c.GlobalString("vault-password")
-	insecure := c.GlobalBool("insecure")
-	port := c.GlobalInt("ssh-port")
-	native := c.GlobalBool("native")
-	forceTerminal := c.GlobalBool("t")
+	vaultParams.Address = c.GlobalString("vault-addr")
+	vaultParams.Token = c.GlobalString("vault-token")
+	vaultParams.Username = c.GlobalString("vault-username")
+	vaultParams.Password = c.GlobalString("vault-password")
+	sshParams.Insecure = c.GlobalBool("insecure")
+	sshParams.Port = c.GlobalInt("ssh-port")
+	sshParams.Native = c.GlobalBool("native")
+	sshParams.ForceTerminal = c.GlobalBool("t")
 
-	client, err := lib.Auth(authType, address, path, token, username, password, logger)
+	client, err := lib.Auth(
+		vaultParams.AuthMethod,
+		vaultParams.Address,
+		vaultParams.AuthPath,
+		vaultParams.Token,
+		vaultParams.Username,
+		vaultParams.Password,
+		logger,
+	)
 	if err != nil {
 		return fmt.Errorf("auth failed: %s", err)
 	}
@@ -221,49 +237,48 @@ func VSSH(c *cli.Context) (e error) {
 		return fmt.Errorf("vault health check error: %s", err)
 	}
 
-	if sshuser == "" {
-		sshuser = c.GlobalString("login_name")
-		if sshuser == "" {
+	if sshParams.LoginName == "" {
+		sshParams.LoginName = c.GlobalString("login_name")
+		if sshParams.LoginName == "" {
 			u, err := user.Current()
 			if err != nil {
 				return err
 			}
-			sshuser = u.Username
+			sshParams.LoginName = u.Username
 		}
 	}
 
 	logger.Debugw(
 		"vssh",
-		"ssh-host", rhost,
-		"ssh-user", sshuser,
-		"privkey", privkeyPath,
-		"vault-ssh-role", role,
-		"vault-ssh-mount-point", sshMountPoint,
+		"ssh-host", sshParams.Host,
+		"ssh-user", sshParams.LoginName,
+		"privkey", sshParams.PrivateKeyPath,
+		"vault-ssh-role", vaultParams.SSHRole,
+		"vault-ssh-mount-point", vaultParams.SSHMount,
 	)
 
 	data := map[string]interface{}{
-		"valid_principals": sshuser,
-		"public_key":       pubkeys,
+		"valid_principals": sshParams.LoginName,
+		"public_key":       pubkeyStr,
 		"cert_type":        "user",
 	}
 
-	logger.Debugw("public key to be signed", "pubkey", pubkeys)
+	logger.Debugw("public key to be signed", "pubkey", pubkeyStr)
 
 	sshc := client.SSH()
-	sshc.MountPoint = sshMountPoint
-	sec, err := sshc.SignKey(role, data)
+	sshc.MountPoint = vaultParams.SSHMount
+	sec, err := sshc.SignKey(vaultParams.SSHRole, data)
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
 	if signed, ok := sec.Data["signed_key"].(string); ok && len(signed) > 0 {
 		logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
-		verbose := loglevel == "debug"
-		return Connect(rhost, sshuser, port, privkeyb, pubkeys, signed, commands, verbose, insecure, native, forceTerminal, logger)
+		return Connect(sshParams, privkeyb, pubkeyStr, signed, logger)
 	}
 	return errors.New("signature has failed")
 }
 
-func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, args []string, verb, insecure, native, force bool, l *zap.SugaredLogger) error {
+func Connect(sshParams SSHParams, priv []byte, pub, signed string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -289,10 +304,10 @@ func Connect(rhost, ruser string, port int, priv []byte, pub, signed string, arg
 		return err
 	}
 	defer os.Remove(certPath)
-	if native {
+	if sshParams.Native {
 		l.Debugw("native SSH client")
-		return Native(privkeyPath, ruser, rhost, port, args, verb, insecure, force, l)
+		return Native(sshParams, privkeyPath, l)
 	}
 	l.Debugw("builtin SSH client")
-	return GoSSH(privkeyPath, certPath, ruser, rhost, port, args, verb, insecure, force, l)
+	return GoSSH(sshParams, privkeyPath, certPath, l)
 }

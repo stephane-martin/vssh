@@ -13,18 +13,18 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func GoSSH(privkeyPath, certPath, ruser, rhost string, port int, args []string, verbose, insecure, force bool, l *zap.SugaredLogger) error {
+func GoSSH(sshParams SSHParams, privkeyPath, certPath string, l *zap.SugaredLogger) error {
 	auth, err := gssh.AuthCertFile(privkeyPath, certPath)
 	if err != nil {
 		return err
 	}
 	cfg := gssh.Config{
-		User: ruser,
-		Host: rhost,
-		Port: port,
+		User: sshParams.LoginName,
+		Host: sshParams.Host,
+		Port: sshParams.Port,
 		Auth: []ssh.AuthMethod{auth},
 	}
-	if insecure {
+	if sshParams.Insecure {
 		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			l.Debugw("host key", "hostname", hostname, "remote", remote.String(), "key", string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(key))))
 			return nil
@@ -44,10 +44,10 @@ func GoSSH(privkeyPath, certPath, ruser, rhost string, port int, args []string, 
 		}
 	}
 	client := gssh.NewClient(cfg)
-	if len(args) == 0 || force {
-		return client.Shell(args...)
+	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
+		return client.Shell(sshParams.Commands...)
 	}
-	output, err := client.OutputWithPty(strings.Join(args, " "))
+	output, err := client.OutputWithPty(strings.Join(sshParams.Commands, " "))
 	fmt.Println(output)
 	if err != nil {
 		return fmt.Errorf("failed to execute command: %s", err)
