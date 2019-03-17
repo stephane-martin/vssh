@@ -24,6 +24,9 @@ func (err *ExitError) Cause() error {
 }
 
 func wrapError(err error) error {
+	if err == nil {
+		return nil
+	}
 	switch err := err.(type) {
 	case *ssh.ExitError:
 		e, s := &ExitError{Err: err, ExitCode: -1}, strings.TrimSpace(err.Error())

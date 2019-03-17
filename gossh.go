@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
@@ -47,8 +48,7 @@ func GoSSH(sshParams SSHParams, privkeyPath, certPath string, l *zap.SugaredLogg
 	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
 		return client.Shell(sshParams.Commands...)
 	}
-	output, err := client.OutputWithPty(strings.Join(sshParams.Commands, " "))
-	fmt.Println(output)
+	err = client.OutputWithPty(strings.Join(sshParams.Commands, " "), os.Stdout, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("failed to execute command: %s", err)
 	}

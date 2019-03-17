@@ -6,7 +6,6 @@
 package ssh
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -109,31 +108,32 @@ func (client *Client) newSession() (*ssh.Session, *ssh.Client, error) {
 }
 
 // Output returns the output of the command run on the remote host.
-func (client *Client) Output(command string) (string, error) {
+func (client *Client) Output(command string, stdout, stderr io.Writer) error {
 	session, conn, err := client.newSession()
 	if err != nil {
-		return "", err
+		return err
 	}
-
-	output, err := session.CombinedOutput(command)
-	_, _ = session.Close(), conn.Close()
-	return string(bytes.TrimSpace(output)), wrapError(err)
+	defer func() {
+		_, _ = session.Close(), conn.Close()
+	}()
+	session.Stdout = stdout
+	session.Stderr = stderr
+	return wrapError(session.Run(command))
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
-func (client *Client) OutputWithPty(command string) (string, error) {
+func (client *Client) OutputWithPty(command string, stdout, stderr io.Writer) error {
 	session, conn, err := client.newSession()
 	if err != nil {
-		return "", nil
+		return err
 	}
-	defer session.Close()
-	defer conn.Close()
+	defer func() {
+		_, _ = session.Close(), conn.Close()
+	}()
 
-	fd := int(os.Stdin.Fd())
-
-	termWidth, termHeight, err := terminal.GetSize(fd)
+	termWidth, termHeight, err := terminal.GetSize(int(os.Stdin.Fd()))
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	modes := ssh.TerminalModes{
@@ -145,12 +145,12 @@ func (client *Client) OutputWithPty(command string) (string, error) {
 	// request tty -- fixes error with hosts that use
 	// "Defaults requiretty" in /etc/sudoers - I'm looking at you RedHat
 	if err := session.RequestPty("xterm", termHeight, termWidth, modes); err != nil {
-		return "", err
+		return err
 	}
+	session.Stdout = stdout
+	session.Stderr = stderr
 
-	output, err := session.CombinedOutput(command)
-
-	return string(bytes.TrimSpace(output)), wrapError(err)
+	return wrapError(session.Run(command))
 }
 
 // Start starts the specified command without waiting for it to finish. You
