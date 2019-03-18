@@ -1,4 +1,4 @@
-package main
+package lib
 
 type VaultParams struct {
 	Address    string
@@ -9,6 +9,7 @@ type VaultParams struct {
 	Password   string
 	SSHMount   string
 	SSHRole    string
+	Secrets    []string
 }
 
 type SSHParams struct {
@@ -21,4 +22,10 @@ type SSHParams struct {
 	ForceTerminal  bool
 	Commands       []string
 	Verbose        bool
+}
+
+type Params struct {
+	LogLevel string
+	Upcase   bool
+	Prefix   bool
 }

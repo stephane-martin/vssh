@@ -310,6 +310,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/hashicorp/vault/api",
     "github.com/mitchellh/go-homedir",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
