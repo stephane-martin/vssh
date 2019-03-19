@@ -92,11 +92,15 @@ With such variables, vssh knowns:
 * which certificate authority to use in Vault
 * which SSH role to use in Vault to produce the certificates
 
+Let's also assume you have generated a SSH private key for your local current
+user::
+
+   ssh-keygen
+
 single sign on
 --------------
 
 Open a terminal, then authenticate yourself with Vault:
-
 
 .. code-block:: bash
 
@@ -106,15 +110,67 @@ The ``vault login`` command writes the resulting token in ``~/.vault_token``.
 If you don't specify to vssh how to authenticate to Vault, by default it will
 use that token.
 
-You can know SSH to any server that recignizes the Vault CA::
+You can know SSH to any server that recognizes the Vault CA::
 
    vssh me@myserver.example.org
+
+execute a remote command
+------------------------
+
+naturally::
+
+   vssh me@myserver.example.org ls -al / 
+
+execute a remote interactive command
+------------------------------------
+
+to execute an interactive command, don't forget the ``-t`` flag::
+
+   vssh -t me@myserver.example.org zsh
+
+inject Vault secrets in the remote session
+------------------------------------------
+
+Now let's say you want to execute a remote command on a server, but some
+part of the configuration for that command is stored in Vault.
+
+``vssh`` can work similar to ``envconsul``::
+
+   vssh --secret secret/mysecret me@myserver.example.org backupcommand
+
+**Locally**, ``vssh`` will read the required secret from Vault. Then it opens the SSH
+connection. Then the command will be executed, with environment variables
+corresponding to the secrets.
+
+So, if ``secret/mysecret`` is something like::
+
+   foo=bar
+   ZOG=ZOG
+
+vssh executes on the remote SSH server::
+
+   env foo=bar ZOG=ZOG backupcommand
+
+With the additional ``--upcase`` flag, it becomes::
+
+   env FOO=bar ZOG=ZOG backupcommand
+
+Or with the additional ``--prefix`` flag it becomes::
+
+   env secret_mysecret_foo=bar secret_mysecret_ZOG=ZOG backupcommand
+
+Your remote SSH environment doesn't have to know anything about Vault by itself.
 
 questions
 =========
 
 what does the ``--native`` flag do ?
 ------------------------------------
+
+vssh includes a pure go SSH client. By default it uses this Go SSH client.
+
+With ``--native``, vssh wraps the native ``ssh`` binary. It can be useful it you
+wish to enable the native configuration of the SSH client (``man 5 ssh_config``).
 
 
 
