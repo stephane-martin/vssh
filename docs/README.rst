@@ -6,7 +6,7 @@ vssh
 introduction
 ============
 
-``vssh`` is an SSH client that uses Hashicorp's vault to authenticate using SSH
+``vssh`` is a SSH client that uses Hashicorp's vault to authenticate with SSH
 certificates.
 
 How it works:
@@ -77,8 +77,46 @@ vault signing role
 examples
 ========
 
+Let's assume you have configured a few environment variables, to avoid
+repetition in the examples.
+
+.. code-block:: bash
+   :caption:environment
+
+   export VAULT_ADDR=https://vault.example.org:8200
+   export VSSH_SSH_MOUNT=ssh-client-signer
+   export VSSH_SIGNING_ROLE=my-vault-ssh-role
+
+With such variables, vssh knowns:
+
+* how to connect to the Vault server instance
+* which certificate authority to use in Vault
+* which SSH role to use in Vault to produce the certificates
+
+single sign on
+--------------
+
+Open a terminal, then authenticate yourself with Vault:
+
+
+.. code-block:: bash
+
+   vault login -method=userpass username=bob
+
+The ``vault login`` command writes the resulting token in ``~/.vault_token``.
+If you don't specify to vssh how to authenticate to Vault, by default it will
+use that token.
+
+You can know SSH to any server that recignizes the Vault CA::
+
+   vssh me@myserver.example.org
+
 questions
 =========
+
+what does the ``--native`` flag do ?
+------------------------------------
+
 
 
 
