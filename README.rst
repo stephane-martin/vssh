@@ -94,7 +94,6 @@ Let's assume you have configured a few environment variables, to avoid
 repetition in the examples.
 
 .. code:: bash
-:caption:environment
 
    export VAULT_ADDR=https://vault.example.org:8200
    export VSSH_SSH_MOUNT=ssh-client-signer
