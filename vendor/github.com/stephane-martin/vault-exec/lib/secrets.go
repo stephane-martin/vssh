@@ -35,6 +35,19 @@ func (e ExpiredSecretError) Error() string {
 	return fmt.Sprintf("can't renew secret %s: %s", e.Key, e.Err)
 }
 
+func equalsMap(m1, m2 map[string]string) bool {
+	if len(m1) != len(m2) {
+		return false
+	}
+	if m1 == nil && m2 != nil {
+		return false
+	}
+	if m1 != nil && m2 == nil {
+		return false
+	}
+	return reflect.DeepEqual(m1, m2)
+}
+
 func GetSecrets(ctx context.Context, clt *api.Client, prefix, up, once bool, keys []string, l *zap.SugaredLogger, results chan map[string]string) (e error) {
 	g, lctx := errgroup.WithContext(ctx)
 	defer func() {
@@ -57,14 +70,14 @@ func GetSecrets(ctx context.Context, clt *api.Client, prefix, up, once bool, key
 			l.Info("token is not renewable")
 		}
 	}
-	previousResult := make(map[string]string)
+	var previousResult map[string]string
 	for {
 		subg, llctx := errgroup.WithContext(lctx)
 		result, err := getSecretsHelper(llctx, subg, clt, prefix, up, once, keys, l)
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(result, previousResult) {
+		if !equalsMap(result, previousResult) {
 			previousResult = result
 			select {
 			case results <- result:
@@ -91,11 +104,21 @@ func GetSecrets(ctx context.Context, clt *api.Client, prefix, up, once bool, key
 
 func getSecretsHelper(ctx context.Context, g *errgroup.Group, clt *api.Client, prefix bool, up, once bool, keys []string, l *zap.SugaredLogger) (map[string]string, error) {
 	fullResults := make(map[string]map[string]string)
+	wait := func() {
+		g.Go(func() error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+	}
 	for _, k := range keys {
 		secretKey := k
 		secret, err := clt.Logical().Read(secretKey)
 		if err != nil {
 			return nil, fmt.Errorf("error reading secret from vault: %s", err)
+		}
+		if secret == nil {
+			wait()
+			continue
 		}
 		l.Debugw("secret read vault vault", "key", secretKey)
 		fullResults[secretKey] = make(map[string]string)
@@ -107,19 +130,15 @@ func getSecretsHelper(ctx context.Context, g *errgroup.Group, clt *api.Client, p
 			}
 		}
 		if once {
-			g.Go(func() error {
-				<-ctx.Done()
-				return ctx.Err()
-			})
-		} else if secret.Renewable {
+			wait()
+			continue
+		}
+		if secret.Renewable {
 			l.Infow("secret is renewable", "secret", secretKey)
 			renewSecret(ctx, g, secret, secretKey, clt, l)
 		} else {
 			l.Infow("secret is not renewable", "secret", secretKey)
-			g.Go(func() error {
-				<-ctx.Done()
-				return ctx.Err()
-			})
+			wait()
 		}
 	}
 
@@ -130,7 +149,7 @@ func getSecretsHelper(ctx context.Context, g *errgroup.Group, clt *api.Client, p
 			if prefix {
 				k = secretKey + "_" + k
 			}
-			k = sanitize(k)
+			k = Sanitize(k)
 			if up {
 				k = strings.ToUpper(k)
 			}

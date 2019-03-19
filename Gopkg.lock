@@ -178,12 +178,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:ae479c48c8dcdf6dfad015efb8fc588ce68e6d0b81f7385a5f7f04ae00c740fd"
+  digest = "1:4fe0bc6f72536624654326c83eb18c201669fc93f21950824d98c45580282367"
   name = "github.com/stephane-martin/vault-exec"
   packages = ["lib"]
   pruneopts = "UT"
-  revision = "ff67f02730290351297392a78b4ae4014e96e896"
-  version = "v0.1.2"
+  revision = "92563369ad1e30add21531483b645237cb472158"
+  version = "v0.1.7"
 
 [[projects]]
   digest = "1:b24d38b282bacf9791408a080f606370efa3d364e4b5fd9ba0f7b87786d3b679"

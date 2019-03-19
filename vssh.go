@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -51,6 +52,16 @@ func VSSH(c *cli.Context) (e error) {
 	if len(spl) == 2 {
 		sshParams.LoginName = spl[0]
 		sshParams.Host = spl[1]
+	}
+	if sshParams.LoginName == "" {
+		sshParams.LoginName = c.GlobalString("login_name")
+		if sshParams.LoginName == "" {
+			u, err := user.Current()
+			if err != nil {
+				return err
+			}
+			sshParams.LoginName = u.Username
+		}
 	}
 	sshParams.Commands = args[1:]
 
@@ -131,15 +142,28 @@ func VSSH(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("vault health check error: %s", err)
 	}
-
-	if sshParams.LoginName == "" {
-		sshParams.LoginName = c.GlobalString("login_name")
-		if sshParams.LoginName == "" {
-			u, err := user.Current()
-			if err != nil {
-				return err
-			}
-			sshParams.LoginName = u.Username
+	var secrets map[string]string
+	if len(vaultParams.Secrets) > 0 {
+		c := make(chan map[string]string, 1)
+		var err error
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			err = vexec.GetSecrets(
+				ctx,
+				client,
+				params.Prefix,
+				params.Upcase,
+				true,
+				vaultParams.Secrets,
+				logger,
+				c,
+			)
+			close(c)
+		}()
+		secrets = <-c
+		cancel()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -161,5 +185,5 @@ func VSSH(c *cli.Context) (e error) {
 	logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
 
 	// TODO: read secrets from Vault
-	return lib.Connect(sshParams, privkeyb, pubkeyStr, signed, logger)
+	return lib.Connect(sshParams, privkeyb, pubkeyStr, signed, secrets, logger)
 }

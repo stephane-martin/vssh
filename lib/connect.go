@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Connect(sshParams SSHParams, priv []byte, pub, signed string, l *zap.SugaredLogger) error {
+func Connect(sshParams SSHParams, priv []byte, pub, signed string, env map[string]string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -37,8 +37,8 @@ func Connect(sshParams SSHParams, priv []byte, pub, signed string, l *zap.Sugare
 	defer os.Remove(certPath)
 	if sshParams.Native {
 		l.Debugw("native SSH client")
-		return Native(sshParams, privkeyPath, l)
+		return Native(sshParams, privkeyPath, certPath, env, l)
 	}
 	l.Debugw("builtin SSH client")
-	return GoSSH(sshParams, privkeyPath, certPath, l)
+	return GoSSH(sshParams, privkeyPath, certPath, env, l)
 }

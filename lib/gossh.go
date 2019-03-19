@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func GoSSH(sshParams SSHParams, privkeyPath, certPath string, l *zap.SugaredLogger) error {
+func GoSSH(sshParams SSHParams, privkeyPath, certPath string, env map[string]string, l *zap.SugaredLogger) error {
 	auth, err := gssh.AuthCertFile(privkeyPath, certPath)
 	if err != nil {
 		return err
@@ -44,11 +44,20 @@ func GoSSH(sshParams SSHParams, privkeyPath, certPath string, l *zap.SugaredLogg
 			return callback(hostname, remote, key)
 		}
 	}
+	var pre []string
+	if len(env) != 0 {
+		pre = append(pre, "env")
+		pre = append(pre, EscapeEnv(env)...)
+		if len(sshParams.Commands) == 0 {
+			pre = append(pre, "bash")
+		}
+	}
+	commands := append(pre, sshParams.Commands...)
 	client := gssh.NewClient(cfg)
 	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
-		return client.Shell(sshParams.Commands...)
+		return client.Shell(commands...)
 	}
-	err = client.OutputWithPty(strings.Join(sshParams.Commands, " "), os.Stdout, os.Stderr)
+	err = client.OutputWithPty(strings.Join(commands, " "), os.Stdout, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("failed to execute command: %s", err)
 	}
