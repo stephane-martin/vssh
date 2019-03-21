@@ -2,11 +2,13 @@ package lib
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"strings"
 
+	"github.com/awnumar/memguard"
 	"github.com/mitchellh/go-homedir"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
@@ -14,8 +16,16 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func GoSSH(sshParams SSHParams, privkeyPath, certPath string, env map[string]string, l *zap.SugaredLogger) error {
-	auth, err := gssh.AuthCertFile(privkeyPath, certPath)
+func GoSSH(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+	c, err := gssh.ParseCertificate(cert.Buffer())
+	if err != nil {
+		return err
+	}
+	s, err := ssh.ParsePrivateKey(privkey.Buffer())
+	if err != nil {
+		return err
+	}
+	signer, err := ssh.NewCertSigner(c, s)
 	if err != nil {
 		return err
 	}
@@ -23,7 +33,7 @@ func GoSSH(sshParams SSHParams, privkeyPath, certPath string, env map[string]str
 		User: sshParams.LoginName,
 		Host: sshParams.Host,
 		Port: sshParams.Port,
-		Auth: []ssh.AuthMethod{auth},
+		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 	}
 	if sshParams.Insecure {
 		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
@@ -55,9 +65,9 @@ func GoSSH(sshParams SSHParams, privkeyPath, certPath string, env map[string]str
 	commands := append(pre, sshParams.Commands...)
 	client := gssh.NewClient(cfg)
 	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
-		return client.Shell(commands...)
+		return client.Shell(ctx, commands...)
 	}
-	err = client.OutputWithPty(strings.Join(commands, " "), os.Stdout, os.Stderr)
+	err = client.OutputWithPty(ctx, strings.Join(commands, " "), os.Stdout, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("failed to execute command: %s", err)
 	}

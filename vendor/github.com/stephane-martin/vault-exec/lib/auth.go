@@ -43,7 +43,7 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 				if err != nil {
 					return nil, fmt.Errorf("error reading token: %s", err)
 				}
-				tok = t
+				tok = string(t)
 			}
 			if tok == "" {
 				return nil, errors.New("empty token")
@@ -57,20 +57,20 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 			if err != nil {
 				return nil, fmt.Errorf("error reading username: %s", err)
 			}
-			if u == "" {
+			if len(u) == 0 {
 				return nil, errors.New("empty username")
 			}
-			username = u
+			username = string(u)
 		}
 		if password == "" {
 			p, err := Input("enter password: ", true)
 			if err != nil {
 				return nil, fmt.Errorf("error reading password: %s", err)
 			}
-			if p == "" {
+			if len(p) == 0 {
 				return nil, errors.New("empty password")
 			}
-			password = p
+			password = string(p)
 		}
 		path = fmt.Sprintf("auth/%s/login/%s", path, username)
 		options := map[string]interface{}{
@@ -88,20 +88,20 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 			if err != nil {
 				return nil, fmt.Errorf("error reading RoleID: %s", err)
 			}
-			if r == "" {
+			if len(r) == 0 {
 				return nil, errors.New("empty RoleID")
 			}
-			username = r
+			username = string(r)
 		}
 		if password == "" {
 			s, err := Input("enter SecretID: ", true)
 			if err != nil {
 				return nil, fmt.Errorf("error reading SecretID: %s", err)
 			}
-			if s == "" {
+			if len(s) == 0 {
 				return nil, errors.New("empty SecretID")
 			}
-			password = s
+			password = string(s)
 		}
 		path = fmt.Sprintf("auth/%s/login", path)
 		options := map[string]interface{}{

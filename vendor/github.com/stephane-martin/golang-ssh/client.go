@@ -6,6 +6,7 @@
 package ssh
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -108,7 +109,7 @@ func (client *Client) newSession() (*ssh.Session, *ssh.Client, error) {
 }
 
 // Output returns the output of the command run on the remote host.
-func (client *Client) Output(command string, stdout, stderr io.Writer) error {
+func (client *Client) Output(ctx context.Context, command string, stdout, stderr io.Writer) error {
 	session, conn, err := client.newSession()
 	if err != nil {
 		return err
@@ -118,11 +119,21 @@ func (client *Client) Output(command string, stdout, stderr io.Writer) error {
 	}()
 	session.Stdout = stdout
 	session.Stderr = stderr
-	return wrapError(session.Run(command))
+	lctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-lctx.Done():
+		case <-ctx.Done():
+			_ = session.Close()
+		}
+	}()
+	err = wrapError(session.Run(command))
+	cancel()
+	return err
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
-func (client *Client) OutputWithPty(command string, stdout, stderr io.Writer) error {
+func (client *Client) OutputWithPty(ctx context.Context, command string, stdout, stderr io.Writer) error {
 	session, conn, err := client.newSession()
 	if err != nil {
 		return err
@@ -150,7 +161,18 @@ func (client *Client) OutputWithPty(command string, stdout, stderr io.Writer) er
 	session.Stdout = stdout
 	session.Stderr = stderr
 
-	return wrapError(session.Run(command))
+	lctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-lctx.Done():
+		case <-ctx.Done():
+			_ = session.Close()
+		}
+	}()
+
+	err = wrapError(session.Run(command))
+	cancel()
+	return err
 }
 
 // Start starts the specified command without waiting for it to finish. You
@@ -194,7 +216,7 @@ func (client *Client) Wait() (err error) {
 
 // Shell requests a shell from the remote. If an arg is passed, it tries to
 // exec them on the server.
-func (client *Client) Shell(args ...string) error {
+func (client *Client) Shell(ctx context.Context, args ...string) error {
 	var (
 		termWidth, termHeight = 80, 24
 	)
@@ -240,16 +262,29 @@ func (client *Client) Shell(args ...string) error {
 		return err
 	}
 
+	lctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-lctx.Done():
+		case <-ctx.Done():
+			_ = session.Close()
+		}
+	}()
+
 	if len(args) != 0 {
-		session.Run(strings.Join(args, " "))
-		return nil
+		err := wrapError(session.Run(strings.Join(args, " ")))
+		cancel()
+		return err
 	}
 
-	if err := session.Shell(); err != nil {
+	err = wrapError(session.Shell())
+	if err != nil {
+		cancel()
 		return err
 	}
 	// monitor for sigwinch
 	go monWinCh(session, os.Stdout.Fd())
-	session.Wait()
-	return nil
+	err = wrapError(session.Wait())
+	cancel()
+	return err
 }

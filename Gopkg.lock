@@ -21,6 +21,17 @@
   version = "v1.3.0"
 
 [[projects]]
+  digest = "1:47fd1237abeac1246a1e690f3c6c8e8c5b963b5bf946be4f9c8210453a502a11"
+  name = "github.com/awnumar/memguard"
+  packages = [
+    ".",
+    "memcall",
+  ]
+  pruneopts = "UT"
+  revision = "f431f51ecd92dc926a5084ac3e9c89080ec7edf4"
+  version = "v0.15.0"
+
+[[projects]]
   digest = "1:94d96b283e7cee29db1b0a36135e6ad9e8584f8f03155ddaf418984ec4de707a"
   name = "github.com/docker/docker"
   packages = ["pkg/term/windows"]
@@ -170,20 +181,20 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:0baa81e5a82e5adb39d88a74d5d59c1c1cdaab33e7cda00d85f2fcbcbbadec14"
+  digest = "1:b3272c8162217fa97e271937bf5de66d245a25ba312f6cd61a7b0026a608a05b"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "7fcf7ae1a50aa99a1a341f6981f5b2996ecf8d7d"
-  version = "v0.3.0"
+  revision = "613a50d5867207c9c0d44fbbd3593dc0da9734c5"
+  version = "v0.4.1"
 
 [[projects]]
-  digest = "1:4fe0bc6f72536624654326c83eb18c201669fc93f21950824d98c45580282367"
+  digest = "1:c71e8477a8885491950015d7b13f0ad68d5d2e1770568418bca835bf8e9632af"
   name = "github.com/stephane-martin/vault-exec"
   packages = ["lib"]
   pruneopts = "UT"
-  revision = "92563369ad1e30add21531483b645237cb472158"
-  version = "v0.1.7"
+  revision = "2ffaa0c53c92a0e21353c044c460676fba180c7d"
+  version = "v0.1.8"
 
 [[projects]]
   digest = "1:b24d38b282bacf9791408a080f606370efa3d364e4b5fd9ba0f7b87786d3b679"
@@ -310,6 +321,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/awnumar/memguard",
     "github.com/hashicorp/vault/api",
     "github.com/mitchellh/go-homedir",
     "github.com/stephane-martin/golang-ssh",

@@ -2,29 +2,29 @@ package lib
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
-	"strings"
 	"syscall"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-func Input(text string, password bool) (string, error) {
+func Input(text string, password bool) ([]byte, error) {
 	if password {
 		fmt.Print(text)
 		input, err := terminal.ReadPassword(syscall.Stdin)
 		fmt.Println()
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return strings.TrimSpace(string(input)), nil
+		return bytes.TrimSpace(input), nil
 	}
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print(text)
-	input, err := reader.ReadString('\n')
+	input, err := reader.ReadBytes('\n')
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return strings.TrimSpace(input), nil
+	return bytes.TrimSpace(input), nil
 }

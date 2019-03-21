@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"os/user"
 	"strings"
+	"syscall"
 
+	"github.com/awnumar/memguard"
 	"github.com/mitchellh/go-homedir"
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
@@ -20,6 +22,16 @@ func VSSH(c *cli.Context) (e error) {
 	defer func() {
 		if e != nil {
 			e = cli.NewExitError(e.Error(), 1)
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		for range sigchan {
+			cancel()
 		}
 	}()
 
@@ -88,11 +100,35 @@ func VSSH(c *cli.Context) (e error) {
 	if len(privkeyb) == 0 {
 		return errors.New("empty private key")
 	}
-	pubkey, err := lib.DerivePublicKey(privkeyb)
+	privkey, err := memguard.NewImmutableFromBytes(privkeyb)
+	if err != nil {
+		return fmt.Errorf("failed to create memguard for private key: %s", err)
+	}
+	needPass, err := lib.NeedPassphrase(privkey)
+	if err != nil {
+		return fmt.Errorf("error parsing private key: %s", err)
+	}
+	if needPass {
+		phrase, err := vexec.Input("enter the passphrase for the private key: ", true)
+		if err != nil {
+			return fmt.Errorf("failed to get passphrase: %s", err)
+		}
+		pass, err := memguard.NewImmutableFromBytes(phrase)
+		if err != nil {
+			return err
+		}
+		decrypted, err := lib.DecryptPrivateKey(privkey, pass)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt private key: %s", err)
+		}
+		privkey.Destroy()
+		privkey = decrypted
+	}
+
+	pubkey, err := lib.DerivePublicKey(privkey)
 	if err != nil {
 		return fmt.Errorf("error extracting public key: %s", err)
 	}
-	pubkeyStr := pubkey.Type() + " " + base64.StdEncoding.EncodeToString(pubkey.Marshal())
 
 	vaultParams.Secrets = c.GlobalStringSlice("secret")
 	vaultParams.SSHMount = c.GlobalString("vault-sshmount")
@@ -140,7 +176,7 @@ func VSSH(c *cli.Context) (e error) {
 	}
 	err = vexec.CheckHealth(client)
 	if err != nil {
-		return fmt.Errorf("vault health check error: %s", err)
+		return fmt.Errorf("Vault health check error: %s", err)
 	}
 	var secrets map[string]string
 	if len(vaultParams.Secrets) > 0 {
@@ -167,23 +203,10 @@ func VSSH(c *cli.Context) (e error) {
 		}
 	}
 
-	logger.Debugw(
-		"vssh",
-		"ssh-host", sshParams.Host,
-		"ssh-user", sshParams.LoginName,
-		"privkey", sshParams.PrivateKeyPath,
-		"vault-ssh-role", vaultParams.SSHRole,
-		"vault-ssh-mount-point", vaultParams.SSHMount,
-	)
-
-	logger.Debugw("public key to be signed", "pubkey", pubkeyStr)
-
-	signed, err := lib.Sign(pubkeyStr, sshParams.LoginName, vaultParams, client)
+	signed, err := lib.Sign(pubkey, sshParams.LoginName, vaultParams, client)
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-	logger.Debugw("signature success", "signed_key", strings.TrimSpace(signed))
 
-	// TODO: read secrets from Vault
-	return lib.Connect(sshParams, privkeyb, pubkeyStr, signed, secrets, logger)
+	return lib.Connect(ctx, sshParams, privkey, pubkey, signed, secrets, logger)
 }
