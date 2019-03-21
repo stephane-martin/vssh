@@ -63,11 +63,10 @@ func GoSSH(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.Loc
 		}
 	}
 	commands := append(pre, sshParams.Commands...)
-	client := gssh.NewClient(cfg)
 	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
-		return client.Shell(ctx, commands...)
+		return gssh.Shell(ctx, cfg, os.Stdin, os.Stdout, os.Stderr, commands...)
 	}
-	err = client.OutputWithPty(ctx, strings.Join(commands, " "), os.Stdout, os.Stderr)
+	err = gssh.OutputWithPty(ctx, cfg, strings.Join(commands, " "), os.Stdout, os.Stderr)
 	if err != nil {
 		return fmt.Errorf("failed to execute command: %s", err)
 	}

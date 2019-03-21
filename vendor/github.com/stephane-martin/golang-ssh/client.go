@@ -7,12 +7,13 @@ package ssh
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/pkg/term"
@@ -24,6 +25,7 @@ type Client struct {
 	Config
 	openSession *ssh.Session
 	openClient  *ssh.Client
+	sync.Mutex
 }
 
 type Config struct {
@@ -86,36 +88,106 @@ func NewClient(cfg Config) *Client {
 	}
 }
 
-func (client *Client) newSession() (*ssh.Session, *ssh.Client, error) {
+// Start starts the specified command without waiting for it to finish. You
+// have to call the Wait function for that.
+func (client *Client) Start(command string) (io.WriteCloser, io.Reader, io.Reader, error) {
+	client.Lock()
+	defer client.Unlock()
+	if client.openSession != nil {
+		return nil, nil, nil, errors.New("client already started")
+	}
+	session, conn, err := newSession(client.Config)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		_ = session.Close()
+		_ = conn.Close()
+		return nil, nil, nil, err
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		_ = session.Close()
+		_ = conn.Close()
+		return nil, nil, nil, err
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		_ = session.Close()
+		_ = conn.Close()
+		return nil, nil, nil, err
+	}
+	err = session.Start(command)
+	if err != nil {
+		_ = session.Close()
+		_ = conn.Close()
+		return nil, nil, nil, err
+	}
+	client.openSession = session
+	client.openClient = conn
+	return stdin, stdout, stderr, nil
+}
+
+// Wait waits for the command started by the Start function to exit. The
+// returned error follows the same logic as in the exec.Cmd.Wait function.
+func (client *Client) Wait() (err error) {
+	client.Lock()
+	sess := client.openSession
+	if sess != nil {
+		client.Unlock()
+		err = sess.Wait()
+		client.Lock()
+		if client.openSession != nil {
+			_ = client.openSession.Close()
+			client.openSession = nil
+		}
+		if client.openClient != nil {
+			_ = client.openClient.Close()
+			client.openClient = nil
+		}
+		client.Unlock()
+		return err
+	}
+	if client.openClient != nil {
+		_ = client.openClient.Close()
+		client.openClient = nil
+	}
+	client.Unlock()
+	return nil
+}
+
+func newSession(config Config) (*ssh.Session, *ssh.Client, error) {
 	var conn *ssh.Client
 	var err error
-	addr := client.Config.addr()
-	nconfig := client.Config.native()
-	for i := client.Config.DialRetry + 1; i > 0; i-- {
-		conn, err = ssh.Dial("tcp", addr, nconfig)
+	for i := config.DialRetry + 1; i > 0; i-- {
+		conn, err = ssh.Dial("tcp", config.addr(), config.native())
 		if err == nil {
 			break
 		}
 		time.Sleep(3 * time.Second) // backoff?
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("Error attempting SSH client dial: %s", err)
+		return nil, nil, err
 	}
 	session, err := conn.NewSession()
 	if err != nil {
-		return nil, nil, nonil(err, conn.Close())
+		_ = conn.Close()
+		return nil, nil, err
 	}
 	return session, conn, nil
 }
 
 // Output returns the output of the command run on the remote host.
-func (client *Client) Output(ctx context.Context, command string, stdout, stderr io.Writer) error {
-	session, conn, err := client.newSession()
+func Output(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
+	session, conn, err := newSession(config)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_, _ = session.Close(), conn.Close()
+		_ = session.Close()
+		_ = conn.Close()
 	}()
 	session.Stdout = stdout
 	session.Stderr = stderr
@@ -133,13 +205,14 @@ func (client *Client) Output(ctx context.Context, command string, stdout, stderr
 }
 
 // Output returns the output of the command run on the remote host as well as a pty.
-func (client *Client) OutputWithPty(ctx context.Context, command string, stdout, stderr io.Writer) error {
-	session, conn, err := client.newSession()
+func OutputWithPty(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
+	session, conn, err := newSession(config)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		_, _ = session.Close(), conn.Close()
+		_ = session.Close()
+		_ = conn.Close()
 	}()
 
 	termWidth, termHeight, err := terminal.GetSize(int(os.Stdin.Fd()))
@@ -175,67 +248,24 @@ func (client *Client) OutputWithPty(ctx context.Context, command string, stdout,
 	return err
 }
 
-// Start starts the specified command without waiting for it to finish. You
-// have to call the Wait function for that.
-func (client *Client) Start(command string) (io.ReadCloser, io.ReadCloser, error) {
-	session, conn, err := client.newSession()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	stdout, err := session.StdoutPipe()
-	if err != nil {
-		return nil, nil, nonil(err, session.Close(), conn.Close())
-	}
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return nil, nil, nonil(err, session.Close(), conn.Close())
-	}
-	if err := session.Start(command); err != nil {
-		return nil, nil, nonil(err, session.Close(), conn.Close())
-	}
-	client.openSession = session
-	client.openClient = conn
-	return ioutil.NopCloser(stdout), ioutil.NopCloser(stderr), nil
-}
-
-// Wait waits for the command started by the Start function to exit. The
-// returned error follows the same logic as in the exec.Cmd.Wait function.
-func (client *Client) Wait() (err error) {
-	if client.openSession != nil {
-		err = client.openSession.Wait()
-		_ = client.openSession.Close()
-		client.openSession = nil
-	}
-	if client.openClient != nil {
-		_ = client.openClient.Close()
-		client.openClient = nil
-	}
-	return err
-}
-
 // Shell requests a shell from the remote. If an arg is passed, it tries to
 // exec them on the server.
-func (client *Client) Shell(ctx context.Context, args ...string) error {
+func Shell(ctx context.Context, config Config, stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	conn, err := ssh.Dial("tcp", client.Config.addr(), client.Config.native())
+	session, conn, err := newSession(config)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() {
+		_ = session.Close()
+		_ = conn.Close()
+	}()
 
-	session, err := conn.NewSession()
-	if err != nil {
-		return err
-	}
-
-	defer session.Close()
-
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-	session.Stdin = os.Stdin
+	session.Stdout = stdout
+	session.Stderr = stderr
+	session.Stdin = stdin
 
 	modes := ssh.TerminalModes{
 		ssh.ECHO: 1,
