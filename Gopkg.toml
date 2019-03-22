@@ -1,6 +1,6 @@
 [[constraint]]
   name = "github.com/stephane-martin/vault-exec"
-  version = "0.1.8"
+  version = "0.2.1"
 
 [[constraint]]
   name = "github.com/urfave/cli"
@@ -16,7 +16,7 @@
 
 [[constraint]]
   name = "github.com/stephane-martin/golang-ssh"
-  version = "0.5.0"
+  version = "0.5.3"
 
 [[constraint]]
   name = "github.com/awnumar/memguard"

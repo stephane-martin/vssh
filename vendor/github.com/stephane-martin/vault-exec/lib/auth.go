@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -11,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func Auth(authType, address, path, tok, username, password string, logger *zap.SugaredLogger) (*api.Client, error) {
+func Auth(ctx context.Context, authType, address, path, tok, username, password string, logger *zap.SugaredLogger) (*api.Client, error) {
 	config := api.DefaultConfig()
 	config.Address = address
 	client, err := api.NewClient(config)
@@ -20,7 +21,7 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 	}
 	switch authType {
 	case "token":
-		logger.Info("token based authentication")
+		logger.Debug("token based authentication")
 		if tok == "" {
 			logger.Debug("token not found on command line or env")
 			tokenPath, err := homedir.Expand("~/.vault-token")
@@ -30,7 +31,7 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 					content, err := ioutil.ReadFile(tokenPath)
 					if err == nil {
 						tok = string(content)
-						logger.Infow("using token from file", "file", tokenPath)
+						logger.Debugw("using token from file", "file", tokenPath)
 					}
 				} else {
 					logger.Debug("unable to read file token")
@@ -76,11 +77,24 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 		options := map[string]interface{}{
 			"password": password,
 		}
-		secret, err := client.Logical().Write(path, options)
-		if err != nil {
-			return nil, fmt.Errorf("vault auth error: %s", err)
+		c := make(chan error)
+		go func() {
+			secret, err := client.Logical().Write(path, options)
+			if err != nil {
+				c <- fmt.Errorf("vault auth error: %s", err)
+				return
+			}
+			client.SetToken(secret.Auth.ClientToken)
+			close(c)
+		}()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case err := <-c:
+			if err != nil {
+				return nil, err
+			}
 		}
-		client.SetToken(secret.Auth.ClientToken)
 
 	case "approle":
 		if username == "" {
@@ -108,11 +122,25 @@ func Auth(authType, address, path, tok, username, password string, logger *zap.S
 			"role_id":   username,
 			"secret_id": password,
 		}
-		secret, err := client.Logical().Write(path, options)
-		if err != nil {
-			return nil, fmt.Errorf("vault auth error: %s", err)
+
+		c := make(chan error)
+		go func() {
+			secret, err := client.Logical().Write(path, options)
+			if err != nil {
+				c <- fmt.Errorf("Vault auth error: %s", err)
+				return
+			}
+			client.SetToken(secret.Auth.ClientToken)
+			close(c)
+		}()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case err := <-c:
+			if err != nil {
+				return nil, err
+			}
 		}
-		client.SetToken(secret.Auth.ClientToken)
 
 	default:
 		return nil, fmt.Errorf("unknown auth type: %s", authType)

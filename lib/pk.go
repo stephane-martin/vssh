@@ -1,6 +1,8 @@
 package lib
 
 import (
+	"bytes"
+	"context"
 	"crypto/dsa"
 	"crypto/ecdsa"
 	"crypto/rsa"
@@ -8,9 +10,17 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
+	vexec "github.com/stephane-martin/vault-exec/lib"
+
 	"github.com/awnumar/memguard"
+	"github.com/hashicorp/vault/api"
+	"github.com/mitchellh/go-homedir"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
 )
@@ -92,4 +102,81 @@ func SerializePublicKey(public *memguard.LockedBuffer) (*memguard.LockedBuffer, 
 		return nil, err
 	}
 	return res, nil
+}
+
+func ReadPrivateKey(ctx context.Context, path string, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
+	if path == "" && vpath == "" {
+		p, err := homedir.Expand("~/.ssh/id_rsa")
+		if err != nil {
+			return nil, err
+		}
+		path = p
+	}
+	if path != "" {
+		return ReadPrivateKeyFS(path)
+	}
+	return ReadPrivateKeyVault(ctx, vpath, client, l)
+}
+
+func ReadPrivateKeyVault(ctx context.Context, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
+	m, err := GetSecretsFromVault(ctx, client, []string{vpath}, false, false, l)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range m {
+		privkeyb := []byte(v)
+		privkeyb2 := append(bytes.Trim(privkeyb, "\n"), '\n')
+		privkey, err := memguard.NewImmutableFromBytes(privkeyb2)
+		memguard.WipeBytes(privkeyb)
+		if err != nil {
+			return nil, err
+		}
+		return privkey, nil
+	}
+	return nil, errors.New("private key not found in Vault")
+}
+
+func ReadPrivateKeyFS(path string) (*memguard.LockedBuffer, error) {
+	infos, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if !infos.Mode().IsRegular() {
+		return nil, errors.New("privkey is not a regular file")
+	}
+
+	privkeyb, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read private key file: %s", err)
+	}
+	if len(privkeyb) == 0 {
+		return nil, errors.New("empty private key")
+	}
+	privkeyb2 := append(bytes.Trim(privkeyb, "\n"), '\n')
+	privkey, err := memguard.NewImmutableFromBytes(privkeyb2)
+	memguard.WipeBytes(privkeyb)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create memguard for private key: %s", err)
+	}
+	needPass, err := NeedPassphrase(privkey)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing private key: %s", err)
+	}
+	if needPass {
+		phrase, err := vexec.Input("enter the passphrase for the private key: ", true)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get passphrase: %s", err)
+		}
+		pass, err := memguard.NewImmutableFromBytes(phrase)
+		if err != nil {
+			return nil, err
+		}
+		decrypted, err := DecryptPrivateKey(privkey, pass)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt private key: %s", err)
+		}
+		privkey.Destroy()
+		privkey = decrypted
+	}
+	return privkey, nil
 }

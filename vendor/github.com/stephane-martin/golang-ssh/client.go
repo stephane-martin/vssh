@@ -26,6 +26,7 @@ type Client struct {
 	openSession *ssh.Session
 	openClient  *ssh.Client
 	sync.Mutex
+	stopping chan struct{}
 }
 
 type Config struct {
@@ -90,12 +91,14 @@ func NewClient(cfg Config) *Client {
 
 // Start starts the specified command without waiting for it to finish. You
 // have to call the Wait function for that.
-func (client *Client) Start(command string) (io.WriteCloser, io.Reader, io.Reader, error) {
+func (client *Client) Start(ctx context.Context, command string) (io.WriteCloser, io.Reader, io.Reader, error) {
 	client.Lock()
 	defer client.Unlock()
 	if client.openSession != nil {
 		return nil, nil, nil, errors.New("client already started")
 	}
+	stopping := make(chan struct{})
+	client.stopping = stopping
 	session, conn, err := newSession(client.Config)
 	if err != nil {
 		return nil, nil, nil, err
@@ -125,6 +128,15 @@ func (client *Client) Start(command string) (io.WriteCloser, io.Reader, io.Reade
 		_ = conn.Close()
 		return nil, nil, nil, err
 	}
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = session.Close()
+		case <-stopping:
+		}
+	}()
+
 	client.openSession = session
 	client.openClient = conn
 	return stdin, stdout, stderr, nil
@@ -139,6 +151,10 @@ func (client *Client) Wait() (err error) {
 		client.Unlock()
 		err = sess.Wait()
 		client.Lock()
+		if client.stopping != nil {
+			close(client.stopping)
+			client.stopping = nil
+		}
 		if client.openSession != nil {
 			_ = client.openSession.Close()
 			client.openSession = nil
@@ -231,6 +247,7 @@ func OutputWithPty(ctx context.Context, config Config, command string, stdout, s
 	if err := session.RequestPty("xterm", termHeight, termWidth, modes); err != nil {
 		return err
 	}
+
 	session.Stdout = stdout
 	session.Stderr = stderr
 

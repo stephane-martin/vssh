@@ -13,7 +13,6 @@ var Version string
 
 func main() {
 	app := App()
-	app.Action = VSSH
 	cli.OsExiter = func(code int) {
 		os.Stdout.Sync()
 		os.Stderr.Sync()

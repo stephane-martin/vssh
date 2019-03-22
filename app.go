@@ -7,10 +7,18 @@ import (
 func App() *cli.App {
 	app := cli.NewApp()
 	app.Name = "vssh"
-	app.Usage = "SSH to remote server using certificate signed by vault"
-	app.UsageText = "vault-ssh [options] host [cmd-to-execute]"
+	app.Usage = "SSH/SCP using certificates signed by Vault"
 	app.Version = Version
-	app.Flags = []cli.Flag{
+	app.Commands = []cli.Command{
+		sshCommand(),
+		scpCommand(),
+	}
+	app.Flags = GlobalFlags()
+	return app
+}
+
+func GlobalFlags() []cli.Flag {
+	return []cli.Flag{
 		cli.StringFlag{
 			Name:   "vault-address,vault-addr",
 			Value:  "http://127.0.0.1:8200",
@@ -24,13 +32,13 @@ func App() *cli.App {
 			Usage:  "Vault authentication token",
 		},
 		cli.StringFlag{
-			Name:   "vault-method,method",
+			Name:   "vault-auth-method,vault-method,method",
 			Usage:  "type of authentication",
 			Value:  "token",
 			EnvVar: "VAULT_AUTH_METHOD",
 		},
 		cli.StringFlag{
-			Name:   "vault-auth-path,path",
+			Name:   "vault-auth-path,vault-path,path",
 			Usage:  "remote path in Vault where the chosen auth method is mounted",
 			Value:  "",
 			EnvVar: "VAULT_AUTH_PATH",
@@ -63,52 +71,5 @@ func App() *cli.App {
 			Usage: "logging level",
 			Value: "info",
 		},
-		cli.StringFlag{
-			Name:   "login_name,ssh-user,l",
-			Usage:  "SSH remote user",
-			EnvVar: "SSH_USER",
-		},
-		cli.IntFlag{
-			Name:   "ssh-port,p",
-			Usage:  "SSH remote port",
-			EnvVar: "SSH_PORT",
-			Value:  22,
-		},
-		cli.StringFlag{
-			Name:   "privkey,private,identity,i",
-			Usage:  "path to the SSH public key to be signed",
-			EnvVar: "IDENTITY",
-			Value:  "",
-		},
-		cli.BoolFlag{
-			Name:   "insecure",
-			Usage:  "do not check the remote SSH host key",
-			EnvVar: "VSSH_INSECURE",
-		},
-		cli.BoolFlag{
-			Name:   "native",
-			Usage:  "use the native SSH client instead of the builtin one",
-			EnvVar: "VSSH_NATIVE",
-		},
-		cli.BoolFlag{
-			Name:   "t",
-			Usage:  "force pseudo-terminal allocation",
-			EnvVar: "VSSH_FORCE_PSEUDO",
-		},
-		cli.StringSliceFlag{
-			Name:  "secret,key",
-			Usage: "path of a secret to be read from Vault (multiple times)",
-		},
-		cli.BoolFlag{
-			Name:   "upcase,up",
-			Usage:  "convert all environment variable keys to uppercase",
-			EnvVar: "UPCASE",
-		},
-		cli.BoolFlag{
-			Name:   "prefix",
-			Usage:  "prefix the environment variable keys with names of secrets",
-			EnvVar: "PREFIX",
-		},
 	}
-	return app
 }

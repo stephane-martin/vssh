@@ -1,5 +1,11 @@
 package lib
 
+import (
+	"strings"
+
+	"github.com/urfave/cli"
+)
+
 type VaultParams struct {
 	Address    string
 	Token      string
@@ -9,19 +15,37 @@ type VaultParams struct {
 	Password   string
 	SSHMount   string
 	SSHRole    string
-	Secrets    []string
+}
+
+func GetVaultParams(c *cli.Context) VaultParams {
+	p := VaultParams{
+		SSHMount:   c.GlobalString("vault-sshmount"),
+		SSHRole:    c.GlobalString("vault-sshrole"),
+		AuthMethod: strings.ToLower(strings.TrimSpace(c.GlobalString("vault-method"))),
+		AuthPath:   strings.TrimSpace(c.GlobalString("vault-auth-path")),
+		Address:    c.GlobalString("vault-addr"),
+		Token:      c.GlobalString("vault-token"),
+		Username:   c.GlobalString("vault-username"),
+		Password:   c.GlobalString("vault-password"),
+	}
+	if p.AuthMethod == "" {
+		p.AuthMethod = "token"
+	}
+	if p.AuthPath == "" {
+		p.AuthPath = p.AuthMethod
+	}
+	return p
 }
 
 type SSHParams struct {
-	LoginName      string
-	Host           string
-	Port           int
-	PrivateKeyPath string
-	Insecure       bool
-	Native         bool
-	ForceTerminal  bool
-	Commands       []string
-	Verbose        bool
+	LoginName     string
+	Host          string
+	Port          int
+	Insecure      bool
+	Native        bool
+	ForceTerminal bool
+	Commands      []string
+	Verbose       bool
 }
 
 type Params struct {

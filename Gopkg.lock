@@ -181,20 +181,20 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:aecb631fb460c1598ef76820191b7e44274396bebdda7f903681eb22aedfca48"
+  digest = "1:09f6ad215c6042670210843df37f491d5385bba4a51f8adca086d637e4b196f7"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "bff2de5cc5afc2e70dadd662322c1f76687323f9"
-  version = "v0.5.0"
+  revision = "1602f83fb92ef64b206ea1a7f26dafb711064638"
+  version = "v0.5.3"
 
 [[projects]]
-  digest = "1:c71e8477a8885491950015d7b13f0ad68d5d2e1770568418bca835bf8e9632af"
+  digest = "1:ab93e2cd3289b7ba468d925f6f21ad06d8faf149e8bcc339fb73386a749ea999"
   name = "github.com/stephane-martin/vault-exec"
   packages = ["lib"]
   pruneopts = "UT"
-  revision = "2ffaa0c53c92a0e21353c044c460676fba180c7d"
-  version = "v0.1.8"
+  revision = "fedf77411056564093121718117f18e850c42f81"
+  version = "v0.2.1"
 
 [[projects]]
   digest = "1:b24d38b282bacf9791408a080f606370efa3d364e4b5fd9ba0f7b87786d3b679"

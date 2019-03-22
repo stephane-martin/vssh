@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"os/user"
+	"path"
 	"strings"
 	"syscall"
 
@@ -15,11 +15,10 @@ import (
 	"github.com/urfave/cli"
 )
 
-func sshCommand() cli.Command {
+func scpCommand() cli.Command {
 	return cli.Command{
-		Name:   "ssh",
-		Usage:  "SSH to remote server",
-		Action: sshAction,
+		Name:  "scp",
+		Usage: "scp using Vault for authentication",
 		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:   "login_name,ssh-user,l",
@@ -49,35 +48,20 @@ func sshCommand() cli.Command {
 				Usage:  "do not check the remote SSH host key",
 				EnvVar: "VSSH_INSECURE",
 			},
-			cli.BoolFlag{
-				Name:   "native",
-				Usage:  "use the native SSH client instead of the builtin one",
-				EnvVar: "VSSH_NATIVE",
+			cli.StringFlag{
+				Name:  "source,src",
+				Usage: "file to copy",
 			},
-			cli.BoolFlag{
-				Name:   "t",
-				Usage:  "force pseudo-terminal allocation",
-				EnvVar: "VSSH_FORCE_PSEUDO",
-			},
-			cli.StringSliceFlag{
-				Name:  "secret,key",
-				Usage: "path of a secret to be read from Vault (multiple times)",
-			},
-			cli.BoolFlag{
-				Name:   "upcase,up",
-				Usage:  "convert all environment variable keys to uppercase",
-				EnvVar: "UPCASE",
-			},
-			cli.BoolFlag{
-				Name:   "prefix",
-				Usage:  "prefix the environment variable keys with names of secrets",
-				EnvVar: "PREFIX",
+			cli.StringFlag{
+				Name:  "destination,dest,dst",
+				Usage: "file path on the remote server",
 			},
 		},
+		Action: scpAction,
 	}
 }
 
-func sshAction(c *cli.Context) (e error) {
+func scpAction(c *cli.Context) (e error) {
 	defer func() {
 		if e != nil {
 			e = cli.NewExitError(e.Error(), 1)
@@ -90,9 +74,24 @@ func sshAction(c *cli.Context) (e error) {
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		for range sigchan {
+			fmt.Fprintln(os.Stderr, "signal!")
 			cancel()
 		}
 	}()
+
+	sourceFname := strings.TrimSpace(c.String("source"))
+	if sourceFname == "" {
+		return errors.New("you must specify the source")
+	}
+	source, err := lib.FileSource(sourceFname)
+	if err != nil {
+		return fmt.Errorf("error reading source: %s", err)
+	}
+	defer source.Close()
+	dest := strings.TrimSpace(c.String("destination"))
+	if dest == "" {
+		dest = path.Base(sourceFname)
+	}
 
 	vaultParams := lib.GetVaultParams(c)
 	if vaultParams.SSHMount == "" {
@@ -104,8 +103,6 @@ func sshAction(c *cli.Context) (e error) {
 
 	params := lib.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
-		Prefix:   c.Bool("prefix"),
-		Upcase:   c.Bool("upcase"),
 	}
 
 	logger, err := vexec.Logger(params.LogLevel)
@@ -144,16 +141,6 @@ func sshAction(c *cli.Context) (e error) {
 		return fmt.Errorf("Vault health check error: %s", err)
 	}
 
-	secretPaths := c.StringSlice("secret")
-	var secrets map[string]string
-	if len(secretPaths) > 0 {
-		res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
-		if err != nil {
-			return err
-		}
-		secrets = res
-	}
-
 	privkey, err := lib.ReadPrivateKey(ctx, c.String("privkey"), c.String("vprivkey"), client, logger)
 	if err != nil {
 		return fmt.Errorf("failed to read private key: %s", err)
@@ -167,37 +154,5 @@ func sshAction(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-
-	return lib.Connect(ctx, sshParams, privkey, pubkey, signed, secrets, logger)
-}
-
-func GetSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams, err error) {
-	p.Verbose = verbose
-	p.Host = strings.TrimSpace(args[0])
-	if p.Host == "" {
-		return p, errors.New("empty host")
-	}
-	spl := strings.SplitN(p.Host, "@", 2)
-	if len(spl) == 2 {
-		p.LoginName = spl[0]
-		p.Host = spl[1]
-	}
-	if p.LoginName == "" {
-		p.LoginName = c.String("login_name")
-		if p.LoginName == "" {
-			u, err := user.Current()
-			if err != nil {
-				return p, err
-			}
-			p.LoginName = u.Username
-		}
-	}
-	p.Commands = args[1:]
-
-	p.Insecure = c.Bool("insecure")
-	p.Port = c.Int("ssh-port")
-	p.Native = c.Bool("native")
-	p.ForceTerminal = c.Bool("t")
-
-	return p, nil
+	return lib.GoSCP(ctx, source, dest, sshParams, privkey, signed, logger)
 }
