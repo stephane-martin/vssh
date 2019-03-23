@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/awnumar/memguard"
 	"github.com/mitchellh/go-homedir"
@@ -18,6 +19,7 @@ import (
 )
 
 type SCPSource struct {
+	Name        string
 	Reader      io.Reader
 	Size        int64
 	Permissions os.FileMode
@@ -41,6 +43,7 @@ func FileSource(filename string) (*SCPSource, error) {
 		return nil, err
 	}
 	return &SCPSource{
+		Name:        path.Base(filename),
 		Reader:      f,
 		Size:        infos.Size(),
 		Permissions: infos.Mode().Perm(),
@@ -89,8 +92,20 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 		}
 	}
 
-	command := fmt.Sprintf("scp -qt %s", path.Dir(remotePath)) // TODO: proper escaping
 	client := gssh.NewClient(cfg)
+
+	remotePath = strings.TrimSpace(remotePath)
+	if remotePath == "" {
+		remotePath = "."
+	}
+
+	command := ""
+	if remotePath == "-" {
+		command = "scp -qt -- -"
+	} else {
+		command = fmt.Sprintf("scp -qt %s", EscapeString(remotePath))
+	}
+
 	stdin, stdout, stderr, err := client.Start(lctx, command)
 	if err != nil {
 		return err
@@ -99,35 +114,73 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 		_, _ = io.Copy(os.Stderr, stderr)
 	}()
 
+	sName := strings.Replace(source.Name, "\n", " ", -1)
 	_, err = fmt.Fprintf(
 		stdin,
 		"C%04o %d %s\n",
-		source.Permissions.Perm(), source.Size, path.Base(remotePath), // TODO: proper escaping
+		source.Permissions.Perm(), source.Size, sName,
 	)
 	if err != nil {
 		return err
 	}
-	resp := make([]byte, 1)
-	_, err = stdout.Read(resp)
+
+	code, message, err := readResponse(stdout)
 	if err != nil {
 		return err
 	}
+	if code != 0 {
+		return fmt.Errorf("scp status %d: %s", code, message)
+	}
+
 	_, err = io.Copy(stdin, source.Reader)
 	if err != nil {
 		return err
 	}
-	_, err = stdout.Read(resp)
+
+	code, message, err = readResponse(stdout)
 	if err != nil {
 		return err
 	}
+	if code != 0 {
+		return fmt.Errorf("scp status %d: %s", code, message)
+	}
+
 	_, err = fmt.Fprint(stdin, "\x00")
 	if err != nil {
 		return err
 	}
 	stdin.Close()
-	_, err = stdout.Read(resp)
+
+	code, message, err = readResponse(stdout)
 	if err != nil {
 		return err
 	}
+	if code != 0 {
+		return fmt.Errorf("scp status %d: %s", code, message)
+	}
+
 	return client.Wait()
+}
+
+func readResponse(reader io.Reader) (code byte, message string, err error) {
+	resp := make([]byte, 1)
+	_, err = reader.Read(resp)
+	if err != nil {
+		return 0, "", err
+	}
+	code = resp[0]
+	if code == 0 {
+		return code, "", nil
+	}
+	for {
+		_, err = reader.Read(resp)
+		if err != nil {
+			return code, message, err
+		}
+		if resp[0] == '\n' {
+			break
+		}
+		message = message + string(resp)
+	}
+	return code, message, nil
 }
