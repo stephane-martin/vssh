@@ -93,13 +93,12 @@ func uploadAction(c *cli.Context) (e error) {
 	if len(sourcesNames) == 0 {
 		return errors.New("you must specify the sources")
 	}
-	var sources []*lib.SCPSource
+	var sources []lib.Source
 	for _, name := range sourcesNames {
-		s, err := lib.FileSource(name)
+		s, err := lib.MakeSource(name)
 		if err != nil {
 			return fmt.Errorf("error reading source %s: %s", name, err)
 		}
-		defer s.Close()
 		sources = append(sources, s)
 	}
 
