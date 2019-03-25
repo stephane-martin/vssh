@@ -11,7 +11,7 @@ func App() *cli.App {
 	app.Version = Version
 	app.Commands = []cli.Command{
 		sshCommand(),
-		scpCommand(),
+		uploadCommand(),
 	}
 	app.Flags = GlobalFlags()
 	return app

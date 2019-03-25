@@ -14,10 +14,10 @@ import (
 	"github.com/urfave/cli"
 )
 
-func scpCommand() cli.Command {
+func uploadCommand() cli.Command {
 	return cli.Command{
-		Name:  "scp",
-		Usage: "scp using Vault for authentication",
+		Name:  "upload",
+		Usage: "upload files with scp using Vault for authentication",
 		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:   "login_name,ssh-user,l",
@@ -56,7 +56,7 @@ func scpCommand() cli.Command {
 				Usage: "file path on the remote server",
 			},
 		},
-		Action: scpAction,
+		Action: uploadAction,
 	}
 }
 
@@ -71,7 +71,7 @@ func transform(a []string) []string {
 	return b
 }
 
-func scpAction(c *cli.Context) (e error) {
+func uploadAction(c *cli.Context) (e error) {
 	defer func() {
 		if e != nil {
 			e = cli.NewExitError(e.Error(), 1)
@@ -169,5 +169,5 @@ func scpAction(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-	return lib.GoSCP(ctx, sources, dest, sshParams, privkey, signed, logger)
+	return lib.Upload(ctx, sources, dest, sshParams, privkey, signed, logger)
 }

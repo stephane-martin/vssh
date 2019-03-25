@@ -52,7 +52,7 @@ func FileSource(filename string) (*SCPSource, error) {
 	}, nil
 }
 
-func GoSCP(ctx context.Context, sources []*SCPSource, remotePath string, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func Upload(ctx context.Context, sources []*SCPSource, remotePath string, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, err := gssh.ParseCertificate(cert.Buffer())
