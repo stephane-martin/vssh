@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,7 +18,7 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-func Sign(pubkey *PublicKey, loginName string, vaultParams VaultParams, client *api.Client) (*memguard.LockedBuffer, error) {
+func Sign(ctx context.Context, pubkey *PublicKey, loginName string, vaultParams VaultParams, client *api.Client) (*memguard.LockedBuffer, error) {
 	defer runtime.GC()
 	data := map[string]interface{}{
 		"valid_principals": loginName,
@@ -28,12 +29,12 @@ func Sign(pubkey *PublicKey, loginName string, vaultParams VaultParams, client *
 	if err != nil {
 		return nil, err
 	}
-	rbody, err := memguard.NewImmutableFromBytes(buf)
+	reqBody, err := memguard.NewImmutableFromBytes(buf)
 	if err != nil {
 		memguard.WipeBytes(buf)
 		return nil, err
 	}
-	defer rbody.Destroy()
+	defer reqBody.Destroy()
 	u, err := url.Parse(client.Address())
 	if err != nil {
 		return nil, err
@@ -42,15 +43,15 @@ func Sign(pubkey *PublicKey, loginName string, vaultParams VaultParams, client *
 	r := &http.Request{
 		Method:        "PUT",
 		URL:           u,
-		Body:          ioutil.NopCloser(bytes.NewReader(rbody.Buffer())),
-		GetBody:       func() (io.ReadCloser, error) { return ioutil.NopCloser(bytes.NewReader(rbody.Buffer())), nil },
-		ContentLength: int64(len(rbody.Buffer())),
+		Body:          ioutil.NopCloser(bytes.NewReader(reqBody.Buffer())),
+		GetBody:       func() (io.ReadCloser, error) { return ioutil.NopCloser(bytes.NewReader(reqBody.Buffer())), nil },
+		ContentLength: int64(len(reqBody.Buffer())),
 		Close:         true,
 		Host:          u.Host,
 		Header:        make(http.Header),
 	}
 	r.Header.Set(consts.AuthHeaderName, client.Token())
-	resp, err := cleanhttp.DefaultClient().Do(r)
+	resp, err := cleanhttp.DefaultClient().Do(r.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -59,14 +60,14 @@ func Sign(pubkey *PublicKey, loginName string, vaultParams VaultParams, client *
 	if err != nil {
 		return nil, err
 	}
-	body, err := memguard.NewImmutableFromBytes(b)
+	respBody, err := memguard.NewImmutableFromBytes(b)
 	if err != nil {
 		memguard.WipeBytes(b)
 		return nil, err
 	}
-	defer body.Destroy()
+	defer respBody.Destroy()
 	p := new(fastjson.Parser)
-	val, err := p.ParseBytes(body.Buffer())
+	val, err := p.ParseBytes(respBody.Buffer())
 	p = nil
 	if err != nil {
 		return nil, err

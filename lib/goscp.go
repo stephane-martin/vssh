@@ -1,6 +1,7 @@
 package lib
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -111,8 +112,9 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 		return err
 	}
 	go func() {
-		_, _ = io.Copy(os.Stderr, stderr)
+		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
 	}()
+	bstdout := bufio.NewReader(stdout)
 
 	sName := strings.Replace(source.Name, "\n", " ", -1)
 	_, err = fmt.Fprintf(
@@ -124,7 +126,7 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 		return err
 	}
 
-	code, message, err := readResponse(stdout)
+	code, message, err := readResponse(bstdout)
 	if err != nil {
 		return err
 	}
@@ -137,7 +139,7 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 		return err
 	}
 
-	code, message, err = readResponse(stdout)
+	code, message, err = readResponse(bstdout)
 	if err != nil {
 		return err
 	}
@@ -151,7 +153,7 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 	}
 	stdin.Close()
 
-	code, message, err = readResponse(stdout)
+	code, message, err = readResponse(bstdout)
 	if err != nil {
 		return err
 	}
@@ -162,25 +164,15 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 	return client.Wait()
 }
 
-func readResponse(reader io.Reader) (code byte, message string, err error) {
-	resp := make([]byte, 1)
-	_, err = reader.Read(resp)
+func readResponse(reader *bufio.Reader) (byte, string, error) {
+	code, err := reader.ReadByte()
 	if err != nil {
 		return 0, "", err
 	}
-	code = resp[0]
 	if code == 0 {
 		return code, "", nil
 	}
-	for {
-		_, err = reader.Read(resp)
-		if err != nil {
-			return code, message, err
-		}
-		if resp[0] == '\n' {
-			break
-		}
-		message = message + string(resp)
-	}
-	return code, message, nil
+	message, err := reader.ReadBytes('\n')
+	message = bytes.TrimRight(message, "\n")
+	return code, string(message), err
 }

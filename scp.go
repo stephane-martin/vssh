@@ -150,7 +150,7 @@ func scpAction(c *cli.Context) (e error) {
 		return fmt.Errorf("error extracting public key: %s", err)
 	}
 
-	signed, err := lib.Sign(pubkey, sshParams.LoginName, vaultParams, client)
+	signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client)
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
