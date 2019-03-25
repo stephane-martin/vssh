@@ -109,7 +109,7 @@ func scpAction(c *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	args := c.Args()
 	if len(args) == 0 {

@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func writePubkey(dir string, pub *memguard.LockedBuffer) (string, error) {
+func writePubkey(dir string, pub *PublicKey) (string, error) {
 	pubkeyPath := filepath.Join(dir, "key.pub")
 	serialized, err := SerializePublicKey(pub)
 	if err != nil {
@@ -47,7 +47,7 @@ func writeKey(path string, key *memguard.LockedBuffer) error {
 	return err
 }
 
-func Native(ctx context.Context, sshParams SSHParams, priv, pub, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func Native(ctx context.Context, sshParams SSHParams, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)

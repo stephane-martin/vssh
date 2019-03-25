@@ -28,29 +28,56 @@ import (
 func NeedPassphrase(privkey *memguard.LockedBuffer) (bool, error) {
 	block, _ := pem.Decode(privkey.Buffer())
 	if block == nil {
-		return false, errors.New("ssh: no key found")
+		return false, errors.New("failed to PEM-decode the private key")
 	}
+	memguard.WipeBytes(block.Bytes)
 	return strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED"), nil
 }
 
 func DecryptPrivateKey(privkey, pass *memguard.LockedBuffer) (*memguard.LockedBuffer, error) {
 	block, _ := pem.Decode(privkey.Buffer())
+	if block == nil {
+		return nil, errors.New("failed to PEM-decode the private key")
+	}
 	if x509.IsEncryptedPEMBlock(block) {
+		typ := block.Type
 		der, err := x509.DecryptPEMBlock(block, pass.Buffer())
+		memguard.WipeBytes(block.Bytes)
 		if err != nil {
 			return nil, err
 		}
-		decrypted, err := memguard.NewImmutableFromBytes(pem.EncodeToMemory(&pem.Block{Type: block.Type, Bytes: der}))
+		decryptedBlock := &pem.Block{Type: typ, Bytes: der}
+		decryptedBuf := pem.EncodeToMemory(decryptedBlock)
+		memguard.WipeBytes(der)
+		memguard.WipeBytes(decryptedBlock.Bytes)
+		decrypted, err := memguard.NewImmutableFromBytes(decryptedBuf)
 		if err != nil {
+			memguard.WipeBytes(decryptedBuf)
 			return nil, err
 		}
 		return decrypted, nil
 	}
+	memguard.WipeBytes(block.Bytes)
 	return privkey, nil
 }
 
-func DerivePublicKey(privkey *memguard.LockedBuffer) (pubBuf *memguard.LockedBuffer, err error) {
+type PublicKey memguard.LockedBuffer
+
+func (k *PublicKey) MarshalJSON() ([]byte, error) {
+	buf, err := SerializePublicKey(k)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]byte, 0, len(buf.Buffer())+2)
+	res = append(res, '"')
+	res = append(res, buf.Buffer()...)
+	res = append(res, '"')
+	return res, nil
+}
+
+func DerivePublicKey(privkey *memguard.LockedBuffer) (*PublicKey, error) {
 	// newpublickey: *dsa.PrivateKey, *ecdsa.PublicKey, *dsa.PublicKey, ed25519.PublicKey
+	// TODO: the private key content leaks in p. wipe it.
 	p, err := ssh.ParseRawPrivateKey(privkey.Buffer())
 	if err != nil {
 		return nil, err
@@ -72,14 +99,15 @@ func DerivePublicKey(privkey *memguard.LockedBuffer) (pubBuf *memguard.LockedBuf
 		return nil, err
 	}
 	pubBytes := public.Marshal()
-	pubBuf, err = memguard.NewImmutableFromBytes(pubBytes)
+	pubBuf, err := memguard.NewImmutableFromBytes(pubBytes)
 	if err != nil {
+		memguard.WipeBytes(pubBytes)
 		return nil, err
 	}
-	return pubBuf, nil
+	return (*PublicKey)(pubBuf), nil
 }
 
-func SerializePublicKey(public *memguard.LockedBuffer) (*memguard.LockedBuffer, error) {
+func SerializePublicKey(public *PublicKey) (*memguard.LockedBuffer, error) {
 	pubkey, err := ssh.ParsePublicKey(public.Buffer())
 	if err != nil {
 		return nil, err

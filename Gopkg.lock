@@ -205,6 +205,17 @@
   version = "v1.20.0"
 
 [[projects]]
+  digest = "1:f95b469161aa3bf30d515403ca1593f566e9d877f1c02479038ce55207118bf5"
+  name = "github.com/valyala/fastjson"
+  packages = [
+    ".",
+    "fastfloat",
+  ]
+  pruneopts = "UT"
+  revision = "73ca3ce4bcd1cb08f60e48df25675b80c6a4e51e"
+  version = "v1.4.1"
+
+[[projects]]
   digest = "1:3c1a69cdae3501bf75e76d0d86dc6f2b0a7421bc205c0cb7b96b19eed464a34d"
   name = "go.uber.org/atomic"
   packages = ["."]
@@ -322,11 +333,14 @@
   analyzer-version = 1
   input-imports = [
     "github.com/awnumar/memguard",
+    "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
+    "github.com/hashicorp/vault/helper/consts",
     "github.com/mitchellh/go-homedir",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
     "github.com/urfave/cli",
+    "github.com/valyala/fastjson",
     "go.uber.org/zap",
     "golang.org/x/crypto/ed25519",
     "golang.org/x/crypto/ssh",

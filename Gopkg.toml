@@ -22,6 +22,10 @@
   name = "github.com/awnumar/memguard"
   version = "0.15.0"
 
+[[constraint]]
+  name = "github.com/valyala/fastjson"
+  version = "1.4.1"
+
 [prune]
   go-tests = true
   unused-packages = true
