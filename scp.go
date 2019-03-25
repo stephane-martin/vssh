@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path"
 	"strings"
 	"syscall"
 
@@ -48,7 +47,7 @@ func scpCommand() cli.Command {
 				Usage:  "do not check the remote SSH host key",
 				EnvVar: "VSSH_INSECURE",
 			},
-			cli.StringFlag{
+			cli.StringSliceFlag{
 				Name:  "source,src",
 				Usage: "file to copy",
 			},
@@ -59,6 +58,17 @@ func scpCommand() cli.Command {
 		},
 		Action: scpAction,
 	}
+}
+
+func transform(a []string) []string {
+	var b []string
+	for _, s := range a {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			b = append(b, s)
+		}
+	}
+	return b
 }
 
 func scpAction(c *cli.Context) (e error) {
@@ -74,23 +84,28 @@ func scpAction(c *cli.Context) (e error) {
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		for range sigchan {
-			fmt.Fprintln(os.Stderr, "signal!")
+			//fmt.Fprintln(os.Stderr, "signal!")
 			cancel()
 		}
 	}()
 
-	sourceFname := strings.TrimSpace(c.String("source"))
-	if sourceFname == "" {
-		return errors.New("you must specify the source")
+	sourcesNames := transform(c.StringSlice("source"))
+	if len(sourcesNames) == 0 {
+		return errors.New("you must specify the sources")
 	}
-	source, err := lib.FileSource(sourceFname)
-	if err != nil {
-		return fmt.Errorf("error reading source: %s", err)
+	var sources []*lib.SCPSource
+	for _, name := range sourcesNames {
+		s, err := lib.FileSource(name)
+		if err != nil {
+			return fmt.Errorf("error reading source %s: %s", name, err)
+		}
+		defer s.Close()
+		sources = append(sources, s)
 	}
-	defer source.Close()
+
 	dest := strings.TrimSpace(c.String("destination"))
 	if dest == "" {
-		dest = path.Base(sourceFname)
+		dest = "."
 	}
 
 	vaultParams := lib.GetVaultParams(c)
@@ -154,5 +169,5 @@ func scpAction(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-	return lib.GoSCP(ctx, source, dest, sshParams, privkey, signed, logger)
+	return lib.GoSCP(ctx, sources, dest, sshParams, privkey, signed, logger)
 }

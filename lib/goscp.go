@@ -52,7 +52,7 @@ func FileSource(filename string) (*SCPSource, error) {
 	}, nil
 }
 
-func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func GoSCP(ctx context.Context, sources []*SCPSource, remotePath string, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	c, err := gssh.ParseCertificate(cert.Buffer())
@@ -116,51 +116,49 @@ func GoSCP(ctx context.Context, source *SCPSource, remotePath string, sshParams 
 	}()
 	bstdout := bufio.NewReader(stdout)
 
-	sName := strings.Replace(source.Name, "\n", " ", -1)
-	_, err = fmt.Fprintf(
-		stdin,
-		"C%04o %d %s\n",
-		source.Permissions.Perm(), source.Size, sName,
-	)
-	if err != nil {
-		return err
-	}
+	for _, source := range sources {
+		l.Debugw("uploading", "filename", source.Name, "size", source.Size)
+		sName := strings.Replace(source.Name, "\n", " ", -1)
+		headerLine := fmt.Sprintf(
+			"C%04o %d %s\n",
+			source.Permissions.Perm(), source.Size, sName,
+		)
+		l.Debugw("header line", "sent", headerLine)
+		_, err := io.WriteString(stdin, headerLine)
+		if err != nil {
+			return err
+		}
 
-	code, message, err := readResponse(bstdout)
-	if err != nil {
-		return err
-	}
-	if code != 0 {
-		return fmt.Errorf("scp status %d: %s", code, message)
-	}
+		code, message, err := readResponse(bstdout)
+		if err != nil {
+			return err
+		}
+		if code != 0 {
+			return fmt.Errorf("scp status %d: %s", code, message)
+		}
 
-	_, err = io.Copy(stdin, source.Reader)
-	if err != nil {
-		return err
-	}
+		n, err := io.Copy(stdin, source.Reader)
+		l.Debugw("uploaded", "bytes", n)
+		if err != nil {
+			return err
+		}
 
-	code, message, err = readResponse(bstdout)
-	if err != nil {
-		return err
-	}
-	if code != 0 {
-		return fmt.Errorf("scp status %d: %s", code, message)
-	}
+		_, err = fmt.Fprint(stdin, "\x00")
+		if err != nil {
+			return err
+		}
 
-	_, err = fmt.Fprint(stdin, "\x00")
-	if err != nil {
-		return err
-	}
-	stdin.Close()
+		code, message, err = readResponse(bstdout)
+		if err != nil {
+			return err
+		}
+		if code != 0 {
+			return fmt.Errorf("scp status %d: %s", code, message)
+		}
 
-	code, message, err = readResponse(bstdout)
-	if err != nil {
-		return err
 	}
-	if code != 0 {
-		return fmt.Errorf("scp status %d: %s", code, message)
-	}
-
+	_ = stdin.Close()
+	l.Debugw("waiting for remote process")
 	return client.Wait()
 }
 
