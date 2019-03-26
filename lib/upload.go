@@ -140,17 +140,20 @@ func Upload(ctx context.Context, sources []Source, remotePath string, sshParams 
 		remotePath = "."
 	}
 
-	var command string
-	if remotePath == "-" {
-		command = "-- -"
-	} else {
-		command = EscapeString(remotePath)
-	}
+	opts := "-q -t"
 	if hasDir(sources) {
-		command = "scp -qrt " + command
-	} else {
-		command = "scp -qt " + command
+		opts += " -r"
 	}
+	if len(sources) > 1 {
+		opts += " -d"
+	}
+	var p string
+	if remotePath == "-" {
+		p = "-- -"
+	} else {
+		p = EscapeString(remotePath)
+	}
+	command := fmt.Sprintf("scp %s %s", opts, p)
 	l.Debugw("remote command", "cmd", command)
 	stdin, stdout, stderr, err := client.Start(lctx, command)
 	if err != nil {
@@ -276,8 +279,7 @@ func sendOne(src Source, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.Suga
 		return err
 	}
 
-	_, err = fmt.Fprint(stdin, "\x00")
-	if err != nil {
+	if err := ack(stdin); err != nil {
 		return err
 	}
 

@@ -4,20 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
+	"go.uber.org/zap"
 )
 
-func uploadCommand() cli.Command {
+func downloadCommand() cli.Command {
 	return cli.Command{
-		Name:  "upload",
-		Usage: "upload files with scp using Vault for authentication",
+		Name:  "download",
+		Usage: "download files with scp using Vault for authentication",
 		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:   "login_name,ssh-user,l",
@@ -49,29 +53,22 @@ func uploadCommand() cli.Command {
 			},
 			cli.StringSliceFlag{
 				Name:  "source,src",
-				Usage: "file to copy",
+				Usage: "file to copy on the remote server",
 			},
 			cli.StringFlag{
 				Name:  "destination,dest,dst",
-				Usage: "file path on the remote server",
+				Usage: "local file path",
+			},
+			cli.BoolFlag{
+				Name:  "preserve,p",
+				Usage: "preserves modification times, access times, and modes from the original file",
 			},
 		},
-		Action: uploadAction,
+		Action: downloadAction,
 	}
 }
 
-func transform(a []string) []string {
-	var b []string
-	for _, s := range a {
-		s = strings.TrimSpace(s)
-		if s != "" {
-			b = append(b, s)
-		}
-	}
-	return b
-}
-
-func uploadAction(c *cli.Context) (e error) {
+func downloadAction(c *cli.Context) (e error) {
 	defer func() {
 		if e != nil {
 			e = cli.NewExitError(e.Error(), 1)
@@ -84,29 +81,28 @@ func uploadAction(c *cli.Context) (e error) {
 	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		for range sigchan {
-			//fmt.Fprintln(os.Stderr, "signal!")
 			cancel()
 		}
 	}()
 
-	sourcesNames := transform(c.StringSlice("source"))
-	if len(sourcesNames) == 0 {
+	sources := transform(c.StringSlice("source"))
+	if len(sources) == 0 {
 		return errors.New("you must specify the sources")
-	}
-	var sources []lib.Source
-	for _, name := range sourcesNames {
-		s, err := lib.MakeSource(name)
-		if err != nil {
-			return fmt.Errorf("error reading source %s: %s", name, err)
-		}
-		sources = append(sources, s)
 	}
 
 	dest := strings.TrimSpace(c.String("destination"))
 	if dest == "" {
 		dest = "."
 	}
-
+	stats, err := os.Stat(dest)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat error on destination: %s", err)
+	}
+	destExists := err == nil
+	destIsDir := err == nil && stats.IsDir()
+	if len(sources) > 1 && destExists && !destIsDir {
+		return errors.New("multiple copies but destination is not a directory")
+	}
 	vaultParams := lib.GetVaultParams(c)
 	if vaultParams.SSHMount == "" {
 		return errors.New("empty SSH mount point")
@@ -168,5 +164,66 @@ func uploadAction(c *cli.Context) (e error) {
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-	return lib.Upload(ctx, sources, dest, sshParams, privkey, signed, logger)
+	return lib.Download(ctx, sources, sshParams, privkey, signed, makeCB(dest, c.Bool("preserve"), logger), logger)
+}
+
+func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
+	return func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content []byte) error {
+		path := filepath.Join(dest, name)
+
+		if endOfDir && preserve {
+			l.Debugw("end of directory", "name", name)
+			err := os.Chmod(path, perms.Perm())
+			if err != nil {
+				l.Infow("failed to chmod directory", "name", path, "error", err)
+			}
+			err = os.Chtimes(path, atime, mtime)
+			if err != nil {
+				l.Infow("failed to chtimes directory", "name", path, "error", err)
+			}
+			return nil
+		}
+
+		if isDir {
+			l.Debugw("received directory", "name", name)
+			stats, err := os.Stat(path)
+			if err != nil {
+				if os.IsNotExist(err) {
+					err := os.MkdirAll(path, 0700)
+					if err != nil {
+						return fmt.Errorf("failed to create directory %s: %s", path, err)
+					}
+				} else {
+					return fmt.Errorf("failed to stat %s: %s", path, err)
+				}
+			} else {
+				if stats.IsDir() {
+					err := os.Chmod(path, stats.Mode().Perm()|0700)
+					if err != nil {
+						l.Infow("failed to chmod directory", "name", path, "error", err)
+					}
+				} else {
+					return fmt.Errorf("file already exists and is not a directory: %s", path)
+				}
+			}
+			return nil
+		}
+
+		l.Debugw("received file", "name", name, "size", len(content))
+		err := ioutil.WriteFile(path, content, perms.Perm()|0600)
+		if err != nil {
+			return fmt.Errorf("failed to write file %s: %s", path, err)
+		}
+		if preserve {
+			err := os.Chmod(path, perms.Perm())
+			if err != nil {
+				l.Infow("failed to chmod file", "name", path, "error", err)
+			}
+			err = os.Chtimes(path, atime, mtime)
+			if err != nil {
+				l.Infow("failed to chtimes file", "name", path, "error", err)
+			}
+		}
+		return nil
+	}
 }
