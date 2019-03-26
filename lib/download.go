@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -21,7 +22,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content []byte) error
+type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content io.Reader) error
 
 func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
 	c, err := gssh.ParseCertificate(cert.Buffer())
@@ -189,16 +190,13 @@ func receiveOne(stdin io.WriteCloser, stdout *bufio.Reader, src, lPath string, c
 			continue
 		}
 		// if msg == 'C'
-		buf := make([]byte, size)
 		_ = ack(stdin)
-		_, err = io.ReadFull(stdout, buf)
+		lr := &io.LimitedReader{R: stdout, N: size}
+		err = cb(false, false, filepath.Join(lPath, target), os.FileMode(perms), mtime, atime, lr)
 		if err != nil {
 			return err
 		}
-		err = cb(false, false, filepath.Join(lPath, target), os.FileMode(perms), mtime, atime, buf)
-		if err != nil {
-			return err
-		}
+		io.Copy(ioutil.Discard, lr)
 		mtime = ztime
 		atime = ztime
 		_, _, _ = readResponse(stdout)

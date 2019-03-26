@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -168,7 +168,7 @@ func downloadAction(c *cli.Context) (e error) {
 }
 
 func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
-	return func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content []byte) error {
+	return func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content io.Reader) error {
 		path := filepath.Join(dest, name)
 
 		if endOfDir && preserve {
@@ -209,8 +209,13 @@ func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
 			return nil
 		}
 
-		l.Debugw("received file", "name", name, "size", len(content))
-		err := ioutil.WriteFile(path, content, perms.Perm()|0600)
+		l.Debugw("received file", "name", name)
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, perms.Perm()|0600)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %s", path, err)
+		}
+		_, err = io.Copy(f, content)
+		_ = f.Close()
 		if err != nil {
 			return fmt.Errorf("failed to write file %s: %s", path, err)
 		}
