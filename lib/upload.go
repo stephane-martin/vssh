@@ -6,17 +6,14 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/awnumar/memguard"
-	"github.com/mitchellh/go-homedir"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type Source interface {
@@ -87,7 +84,7 @@ func MakeSource(filename string) (Source, error) {
 	return nil, fmt.Errorf("is not a regular file: %s", filename)
 }
 
-func Upload(ctx context.Context, sources []Source, remotePath string, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func Upload(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // close the SSH session
@@ -108,30 +105,16 @@ func Upload(ctx context.Context, sources []Source, remotePath string, sshParams 
 		return err
 	}
 	cfg := gssh.Config{
-		User: sshParams.LoginName,
-		Host: sshParams.Host,
-		Port: sshParams.Port,
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
 		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 	}
-	if sshParams.Insecure {
-		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			l.Debugw("host key", "hostname", hostname, "remote", remote.String(), "key", string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(key))))
-			return nil
-		}
-	} else {
-		kh, err := homedir.Expand("~/.ssh/known_hosts")
-		if err != nil {
-			return fmt.Errorf("failed to expand known_hosts path: %s", err)
-		}
-		callback, err := knownhosts.New(kh)
-		if err != nil {
-			return fmt.Errorf("failed to open known_hosts file: %s", err)
-		}
-		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			l.Debugw("host key", "hostname", hostname, "remote", remote.String(), "key", string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(key))))
-			return callback(hostname, remote, key)
-		}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
 	}
+	cfg.HostKey = hkcb
 
 	client := gssh.NewClient(cfg)
 

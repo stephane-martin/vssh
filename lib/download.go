@@ -8,21 +8,19 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
 	"github.com/awnumar/memguard"
-	"github.com/mitchellh/go-homedir"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content io.Reader) error
+// Callback is a function type that is used by Download to return the remote SSH directories and files.
+type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
 
 func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
 	c, err := gssh.ParseCertificate(cert.Buffer())
@@ -43,30 +41,16 @@ func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cer
 		Port: params.Port,
 		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
 	}
-	if params.Insecure {
-		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			l.Debugw("host key", "hostname", hostname, "remote", remote.String(), "key", string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(key))))
-			return nil
-		}
-	} else {
-		kh, err := homedir.Expand("~/.ssh/known_hosts")
-		if err != nil {
-			return fmt.Errorf("failed to expand known_hosts path: %s", err)
-		}
-		callback, err := knownhosts.New(kh)
-		if err != nil {
-			return fmt.Errorf("failed to open known_hosts file: %s", err)
-		}
-		cfg.HostKey = func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-			l.Debugw("host key", "hostname", hostname, "remote", remote.String(), "key", string(bytes.TrimSpace(ssh.MarshalAuthorizedKey(key))))
-			return callback(hostname, remote, key)
-		}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
 	}
+	cfg.HostKey = hkcb
 
 	client := gssh.NewClient(cfg)
 
 	for _, source := range srcs {
-		err := receive(ctx, client, source, privkey, cert, cb, l)
+		err := receive(ctx, client, source, cb, l)
 		if err != nil {
 			return err
 		}
@@ -74,7 +58,7 @@ func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cer
 	return nil
 }
 
-func receive(ctx context.Context, clt *gssh.Client, src string, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var p string
@@ -107,7 +91,7 @@ func receive(ctx context.Context, clt *gssh.Client, src string, privkey, cert *m
 
 var ztime time.Time
 
-func receiveOne(stdin io.WriteCloser, stdout *bufio.Reader, src, lPath string, cb Callback, l *zap.SugaredLogger) error {
+func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Callback, l *zap.SugaredLogger) error {
 	_ = ack(stdin)
 	var mtime time.Time
 	var atime time.Time
@@ -196,7 +180,7 @@ func receiveOne(stdin io.WriteCloser, stdout *bufio.Reader, src, lPath string, c
 		if err != nil {
 			return err
 		}
-		io.Copy(ioutil.Discard, lr)
+		_, _ = io.Copy(ioutil.Discard, lr)
 		mtime = ztime
 		atime = ztime
 		_, _, _ = readResponse(stdout)

@@ -38,14 +38,14 @@ func GetVaultParams(c *cli.Context) VaultParams {
 }
 
 type SSHParams struct {
-	LoginName     string
-	Host          string
 	Port          int
 	Insecure      bool
 	Native        bool
 	ForceTerminal bool
-	Commands      []string
 	Verbose       bool
+	LoginName     string
+	Host          string
+	Commands      []string
 }
 
 type Params struct {

@@ -15,6 +15,10 @@ import (
 	"github.com/urfave/cli"
 )
 
+const (
+	DEBUG = "debug"
+)
+
 func sshCommand() cli.Command {
 	return cli.Command{
 		Name:   "ssh",
@@ -118,7 +122,7 @@ func sshAction(c *cli.Context) (e error) {
 	if len(args) == 0 {
 		return errors.New("no host provided")
 	}
-	sshParams, err := GetSSHParams(c, params.LogLevel == "debug", args)
+	sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
 	if err != nil {
 		return err
 	}
@@ -168,10 +172,10 @@ func sshAction(c *cli.Context) (e error) {
 		return fmt.Errorf("signing error: %s", err)
 	}
 
-	return lib.Connect(ctx, sshParams, privkey, pubkey, signed, secrets, logger)
+	return lib.Connect(ctx, sshParams, privkey, signed, pubkey, secrets, logger)
 }
 
-func GetSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams, err error) {
+func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams, err error) {
 	p.Verbose = verbose
 	p.Host = strings.TrimSpace(args[0])
 	if p.Host == "" {

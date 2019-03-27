@@ -4,6 +4,7 @@ import (
 	"github.com/urfave/cli"
 )
 
+// App returns the vssh application object.
 func App() *cli.App {
 	app := cli.NewApp()
 	app.Name = "vssh"
@@ -18,6 +19,7 @@ func App() *cli.App {
 	return app
 }
 
+// GlobalFlags returns the global flags for vssh.
 func GlobalFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{

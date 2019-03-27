@@ -1,6 +1,6 @@
 .POSIX:
 .SUFFIXES:
-.PHONY: debug release vet clean version install_vendor edit
+.PHONY: debug release lint clean version install_vendor editdoc
 .SILENT: version 
 
 SOURCES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
@@ -8,7 +8,7 @@ SOURCES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 BINARY=vssh
 FULL=github.com/stephane-martin/vssh
 VERSION=0.2.0
-LDFLAGS=-ldflags '-X main.Version=${VERSION}'
+LDFLAGS=-ldflags '-X main.Version=${VERSION}' -gcflags "all=-N -l"
 LDFLAGS_RELEASE=-ldflags '-w -s -X main.Version=${VERSION}'
 
 debug: ${BINARY}_debug
@@ -28,7 +28,7 @@ ${BINARY}: ${SOURCES}
 README.rst: docs/README.rst
 	pandoc -s --toc --toc-depth=1 --wrap=auto --columns=80 --number-sections --from rst --to rst -o README.rst docs/README.rst
 
-edit:
+editdoc:
 	nohup restview docs/README.rst >/dev/null &
 	nvim docs/README.rst	
 	pkill restview
@@ -40,7 +40,5 @@ clean:
 version:
 	echo ${VERSION}
 
-vet:
-	go vet ./...
-
-
+lint:
+	golangci-lint run -E dupl,goconst,gosec,interfacer,maligned,prealloc,scopelint,unconvert,unparam

@@ -125,7 +125,7 @@ func downloadAction(c *cli.Context) (e error) {
 	if len(args) == 0 {
 		return errors.New("no host provided")
 	}
-	sshParams, err := GetSSHParams(c, params.LogLevel == "debug", args)
+	sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
 	if err != nil {
 		return err
 	}

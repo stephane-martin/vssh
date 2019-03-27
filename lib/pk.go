@@ -25,6 +25,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
+// NeedPassphrase checks if the given private key needs a passphrase to be decoded.
 func NeedPassphrase(privkey *memguard.LockedBuffer) (bool, error) {
 	block, _ := pem.Decode(privkey.Buffer())
 	if block == nil {
@@ -34,6 +35,7 @@ func NeedPassphrase(privkey *memguard.LockedBuffer) (bool, error) {
 	return strings.Contains(block.Headers["Proc-Type"], "ENCRYPTED"), nil
 }
 
+// DecryptPrivateKey returns the decrypted version of the given private key, using a passphrase.
 func DecryptPrivateKey(privkey, pass *memguard.LockedBuffer) (*memguard.LockedBuffer, error) {
 	block, _ := pem.Decode(privkey.Buffer())
 	if block == nil {

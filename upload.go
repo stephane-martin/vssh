@@ -93,7 +93,7 @@ func uploadAction(c *cli.Context) (e error) {
 	if len(sourcesNames) == 0 {
 		return errors.New("you must specify the sources")
 	}
-	var sources []lib.Source
+	sources := make([]lib.Source, 0, len(sourcesNames))
 	for _, name := range sourcesNames {
 		s, err := lib.MakeSource(name)
 		if err != nil {
@@ -129,7 +129,7 @@ func uploadAction(c *cli.Context) (e error) {
 	if len(args) == 0 {
 		return errors.New("no host provided")
 	}
-	sshParams, err := GetSSHParams(c, params.LogLevel == "debug", args)
+	sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
 	if err != nil {
 		return err
 	}

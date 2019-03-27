@@ -54,9 +54,7 @@ func Native(ctx context.Context, sshParams SSHParams, priv *memguard.LockedBuffe
 	}
 	l.Debugw("using temp directory", "dirname", dir)
 	defer os.RemoveAll(dir)
-	if err != nil {
-		return err
-	}
+
 	pubkeyPath, err := writePubkey(dir, pub)
 	defer os.Remove(pubkeyPath)
 	if err != nil {
