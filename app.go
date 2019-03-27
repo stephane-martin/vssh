@@ -26,7 +26,7 @@ func GlobalFlags() []cli.Flag {
 			Name:   "vault-address,vault-addr",
 			Value:  "http://127.0.0.1:8200",
 			EnvVar: "VAULT_ADDR",
-			Usage:  "The address of the Vault server",
+			Usage:  "the address of the Vault server",
 		},
 		cli.StringFlag{
 			Name:   "vault-token,token",
@@ -59,15 +59,15 @@ func GlobalFlags() []cli.Flag {
 			EnvVar: "VAULT_PASSWORD",
 		},
 		cli.StringFlag{
-			Name:   "vault-sshmount,mount,m",
+			Name:   "vault-ssh-mount,mount,m",
 			Usage:  "Vault SSH signer mount point",
-			EnvVar: "VSSH_SSH_MOUNT",
+			EnvVar: "VAULT_SSH_MOUNT",
 			Value:  "ssh-client-signer",
 		},
 		cli.StringFlag{
-			Name:   "vault-sshrole,role",
+			Name:   "vault-ssh-role,role",
 			Usage:  "Vault signing role",
-			EnvVar: "VSSH_SIGNING_ROLE",
+			EnvVar: "VAULT_SIGNING_ROLE",
 		},
 		cli.StringFlag{
 			Name:  "loglevel",

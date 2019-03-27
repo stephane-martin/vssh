@@ -19,10 +19,10 @@ type VaultParams struct {
 
 func GetVaultParams(c *cli.Context) VaultParams {
 	p := VaultParams{
-		SSHMount:   c.GlobalString("vault-sshmount"),
-		SSHRole:    c.GlobalString("vault-sshrole"),
-		AuthMethod: strings.ToLower(strings.TrimSpace(c.GlobalString("vault-method"))),
-		AuthPath:   strings.TrimSpace(c.GlobalString("vault-auth-path")),
+		SSHMount:   c.GlobalString("vault-ssh-mount"),
+		SSHRole:    c.GlobalString("vault-ssh-role"),
+		AuthMethod: strings.ToLower(c.GlobalString("vault-method")),
+		AuthPath:   c.GlobalString("vault-auth-path"),
 		Address:    c.GlobalString("vault-addr"),
 		Token:      c.GlobalString("vault-token"),
 		Username:   c.GlobalString("vault-username"),

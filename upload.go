@@ -20,12 +20,12 @@ func uploadCommand() cli.Command {
 		Usage: "upload files with scp using Vault for authentication",
 		Flags: []cli.Flag{
 			cli.StringFlag{
-				Name:   "login_name,ssh-user,l",
+				Name:   "login,l",
 				Usage:  "SSH remote user",
 				EnvVar: "SSH_USER",
 			},
 			cli.IntFlag{
-				Name:   "ssh-port,P",
+				Name:   "ssh-port,sshport,P",
 				Usage:  "SSH remote port",
 				EnvVar: "SSH_PORT",
 				Value:  22,
@@ -45,10 +45,10 @@ func uploadCommand() cli.Command {
 			cli.BoolFlag{
 				Name:   "insecure",
 				Usage:  "do not check the remote SSH host key",
-				EnvVar: "VSSH_INSECURE",
+				EnvVar: "SSH_INSECURE",
 			},
 			cli.StringSliceFlag{
-				Name:  "source,src",
+				Name:  "source",
 				Usage: "file to copy",
 			},
 			cli.StringFlag{

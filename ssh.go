@@ -26,12 +26,12 @@ func sshCommand() cli.Command {
 		Action: sshAction,
 		Flags: []cli.Flag{
 			cli.StringFlag{
-				Name:   "login_name,ssh-user,l",
+				Name:   "login,l",
 				Usage:  "SSH remote user",
 				EnvVar: "SSH_USER",
 			},
 			cli.IntFlag{
-				Name:   "ssh-port,p",
+				Name:   "ssh-port,sshport,p",
 				Usage:  "SSH remote port",
 				EnvVar: "SSH_PORT",
 				Value:  22,
@@ -51,17 +51,17 @@ func sshCommand() cli.Command {
 			cli.BoolFlag{
 				Name:   "insecure",
 				Usage:  "do not check the remote SSH host key",
-				EnvVar: "VSSH_INSECURE",
+				EnvVar: "SSH_INSECURE",
 			},
 			cli.BoolFlag{
 				Name:   "native",
 				Usage:  "use the native SSH client instead of the builtin one",
-				EnvVar: "VSSH_NATIVE",
+				EnvVar: "SSH_NATIVE",
 			},
 			cli.BoolFlag{
-				Name:   "t",
+				Name:   "terminal,t",
 				Usage:  "force pseudo-terminal allocation",
-				EnvVar: "VSSH_FORCE_PSEUDO",
+				EnvVar: "SSH_FORCE_PSEUDO",
 			},
 			cli.StringSliceFlag{
 				Name:  "secret,key",
@@ -187,7 +187,7 @@ func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams,
 		p.Host = spl[1]
 	}
 	if p.LoginName == "" {
-		p.LoginName = c.String("login_name")
+		p.LoginName = c.String("login")
 		if p.LoginName == "" {
 			u, err := user.Current()
 			if err != nil {
@@ -201,7 +201,7 @@ func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams,
 	p.Insecure = c.Bool("insecure")
 	p.Port = c.Int("ssh-port")
 	p.Native = c.Bool("native")
-	p.ForceTerminal = c.Bool("t")
+	p.ForceTerminal = c.Bool("terminal")
 
 	return p, nil
 }

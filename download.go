@@ -24,12 +24,12 @@ func downloadCommand() cli.Command {
 		Usage: "download files with scp using Vault for authentication",
 		Flags: []cli.Flag{
 			cli.StringFlag{
-				Name:   "login_name,ssh-user,l",
+				Name:   "login,l",
 				Usage:  "SSH remote user",
 				EnvVar: "SSH_USER",
 			},
 			cli.IntFlag{
-				Name:   "ssh-port,P",
+				Name:   "ssh-port,sshport,P",
 				Usage:  "SSH remote port",
 				EnvVar: "SSH_PORT",
 				Value:  22,
@@ -48,12 +48,12 @@ func downloadCommand() cli.Command {
 			},
 			cli.BoolFlag{
 				Name:   "insecure",
-				Usage:  "do not check the remote SSH host key",
-				EnvVar: "VSSH_INSECURE",
+				Usage:  "do not check the SSH server host key",
+				EnvVar: "SSH_INSECURE",
 			},
 			cli.StringSliceFlag{
-				Name:  "source,src",
-				Usage: "file to copy on the remote server",
+				Name:  "target",
+				Usage: "file to copy from the remote server",
 			},
 			cli.StringFlag{
 				Name:  "destination,dest,dst",
@@ -85,9 +85,9 @@ func downloadAction(c *cli.Context) (e error) {
 		}
 	}()
 
-	sources := transform(c.StringSlice("source"))
+	sources := transform(c.StringSlice("target"))
 	if len(sources) == 0 {
-		return errors.New("you must specify the sources")
+		return errors.New("you must specify the targets")
 	}
 
 	dest := strings.TrimSpace(c.String("destination"))
