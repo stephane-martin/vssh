@@ -24,14 +24,10 @@ ${BINARY}_debug: ${SOURCES}
 ${BINARY}: ${SOURCES}
 	env CGO_ENABLED=0 go build -a -installsuffix nocgo -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
 
-README.rst: docs/README.rst
-	pandoc -s --toc --toc-depth=1 --wrap=auto --columns=80 --number-sections --from rst --to rst -o README.rst docs/README.rst
-
 editdoc:
-	nohup restview docs/README.rst >/dev/null &
-	nvim docs/README.rst	
+	nohup restview README.rst 1>/dev/null 2>/dev/null &
+	nvim README.rst	
 	pkill restview
-	pandoc -s --toc --toc-depth=1 --wrap=auto --columns=80 --number-sections --from rst --to rst -o README.rst docs/README.rst
 
 clean:
 	rm -f ${BINARY} ${BINARY}_debug
