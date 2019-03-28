@@ -69,7 +69,7 @@ func (cfg Config) hostKey() ssh.HostKeyCallback {
 }
 
 func (cfg Config) addr() string {
-	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
+	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.port()))
 }
 
 func (cfg Config) native() *ssh.ClientConfig {
@@ -164,7 +164,7 @@ func (client *Client) Wait() (err error) {
 			client.openClient = nil
 		}
 		client.Unlock()
-		return err
+		return wrapError(err)
 	}
 	if client.openClient != nil {
 		_ = client.openClient.Close()
@@ -296,7 +296,7 @@ func Shell(ctx context.Context, config Config, stdin io.Reader, stdout, stderr i
 			return err
 		}
 
-		defer term.RestoreTerminal(fd, oldState)
+		defer func() { _ = term.RestoreTerminal(fd, oldState) }()
 
 		winsize, err := term.GetWinsize(fd)
 		if err == nil {

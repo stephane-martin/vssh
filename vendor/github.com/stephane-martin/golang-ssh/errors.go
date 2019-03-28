@@ -7,7 +7,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// ExitError is a conveniance wrapper for (crypto/ssh).ExitError type.
+// ExitError is a convenience wrapper for (crypto/ssh).ExitError type.
 type ExitError struct {
 	Err      error
 	ExitCode int
@@ -41,13 +41,4 @@ func wrapError(err error) error {
 	default:
 		return err
 	}
-}
-
-func nonil(err ...error) error {
-	for _, e := range err {
-		if e != nil {
-			return e
-		}
-	}
-	return nil
 }
