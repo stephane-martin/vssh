@@ -48,6 +48,8 @@ vssh can open an interactive shell on the remote server, or execute a command.
 install
 =======
 
+Nothing special. Just copy the binary into your PATH.
+
 compile
 =======
 
