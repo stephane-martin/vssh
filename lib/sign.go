@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -18,11 +20,11 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-func Sign(ctx context.Context, pubkey *PublicKey, loginName string, vaultParams VaultParams, client *api.Client) (*memguard.LockedBuffer, error) {
+func Sign(ctx context.Context, pub *PublicKey, login string, params VaultParams, clt *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
 	defer runtime.GC()
 	data := map[string]interface{}{
-		"valid_principals": loginName,
-		"public_key":       pubkey,
+		"valid_principals": login,
+		"public_key":       pub,
 		"cert_type":        "user",
 	}
 	buf, err := json.Marshal(data)
@@ -35,11 +37,11 @@ func Sign(ctx context.Context, pubkey *PublicKey, loginName string, vaultParams 
 		return nil, err
 	}
 	defer reqBody.Destroy()
-	u, err := url.Parse(client.Address())
+	u, err := url.Parse(clt.Address())
 	if err != nil {
 		return nil, err
 	}
-	u.Path = fmt.Sprintf("/v1/%s/sign/%s", vaultParams.SSHMount, vaultParams.SSHRole)
+	u.Path = fmt.Sprintf("/v1/%s/sign/%s", params.SSHMount, params.SSHRole)
 	r := &http.Request{
 		Method:        "PUT",
 		URL:           u,
@@ -50,7 +52,7 @@ func Sign(ctx context.Context, pubkey *PublicKey, loginName string, vaultParams 
 		Host:          u.Host,
 		Header:        make(http.Header),
 	}
-	r.Header.Set(consts.AuthHeaderName, client.Token())
+	r.Header.Set(consts.AuthHeaderName, clt.Token())
 	resp, err := cleanhttp.DefaultClient().Do(r.WithContext(ctx))
 	if err != nil {
 		return nil, err
@@ -73,6 +75,14 @@ func Sign(ctx context.Context, pubkey *PublicKey, loginName string, vaultParams 
 		return nil, err
 	}
 	s := val.GetStringBytes("data", "signed_key")
+	if len(s) == 0 {
+		errStr := string(val.GetStringBytes("errors", "0"))
+		if errStr != "" {
+			return nil, errors.New(errStr)
+		}
+		l.Debugw("unexpected Vault response", "response", string(respBody.Buffer()))
+		return nil, errors.New("unexpected Vault response")
+	}
 	val = nil
 	signed, err := memguard.NewImmutableFromBytes(s)
 	if err != nil {

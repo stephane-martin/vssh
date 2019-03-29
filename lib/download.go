@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/awnumar/memguard"
@@ -89,13 +90,13 @@ func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *
 	return clt.Wait()
 }
 
-var ztime time.Time
-
 func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Callback, l *zap.SugaredLogger) error {
 	_ = ack(stdin)
 	var mtime time.Time
 	var atime time.Time
+	var iter int
 	for {
+		iter++
 		line, err := stdout.ReadBytes('\n')
 		if err == io.EOF {
 			return nil
@@ -140,8 +141,12 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 			continue
 		}
 		if msg != 'D' && msg != 'C' {
-			return fmt.Errorf("unexpected: %s", line)
+			if iter == 1 {
+				return errors.New(string(line))
+			}
+			return fmt.Errorf("unexpected response: %s", string(line))
 		}
+
 		splits := bytes.Fields(line)
 		if len(splits) < 3 {
 			return errors.New("invalid header line")
@@ -155,6 +160,18 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 			return fmt.Errorf("bad size: %s", err)
 		}
 		target := string(bytes.Join(splits[2:], []byte(" ")))
+		if target == "" || target == "." || target == ".." || strings.Contains(target, "/") {
+			return fmt.Errorf("unexpected filename: %s", target)
+		}
+
+		now := time.Now()
+		if mtime.IsZero() {
+			mtime = now
+		}
+		if atime.IsZero() {
+			atime = now
+		}
+
 		if msg == 'D' {
 			dirPath := filepath.Join(lPath, target)
 			err := cb(true, false, dirPath, os.FileMode(perms), mtime, atime, nil)
@@ -169,10 +186,11 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 			if err != nil {
 				return err
 			}
-			mtime = ztime
-			atime = ztime
+			mtime = time.Time{}
+			atime = time.Time{}
 			continue
 		}
+
 		// if msg == 'C'
 		_ = ack(stdin)
 		lr := &io.LimitedReader{R: stdout, N: size}
@@ -181,8 +199,8 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 			return err
 		}
 		_, _ = io.Copy(ioutil.Discard, lr)
-		mtime = ztime
-		atime = ztime
+		mtime = time.Time{}
+		atime = time.Time{}
 		_, _, _ = readResponse(stdout)
 		_ = ack(stdin)
 	}

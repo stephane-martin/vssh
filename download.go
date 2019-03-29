@@ -101,7 +101,10 @@ func downloadAction(c *cli.Context) (e error) {
 	destExists := err == nil
 	destIsDir := err == nil && stats.IsDir()
 	if len(sources) > 1 && destExists && !destIsDir {
-		return errors.New("multiple copies but destination is not a directory")
+		return fmt.Errorf("not a directory: %s", dest)
+	}
+	if len(sources) > 1 && !destExists {
+		return fmt.Errorf("no such file or directory: %s", dest)
 	}
 	vaultParams := lib.GetVaultParams(c)
 	if vaultParams.SSHMount == "" {
@@ -131,7 +134,7 @@ func downloadAction(c *cli.Context) (e error) {
 	}
 
 	// unset env VAULT_ADDR to prevent the vault client from seeing it
-	os.Unsetenv("VAULT_ADDR")
+	_ = os.Unsetenv("VAULT_ADDR")
 
 	client, err := vexec.Auth(
 		ctx,
@@ -160,23 +163,37 @@ func downloadAction(c *cli.Context) (e error) {
 		return fmt.Errorf("error extracting public key: %s", err)
 	}
 
-	signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client)
+	signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client, logger)
 	if err != nil {
 		return fmt.Errorf("signing error: %s", err)
 	}
-	return lib.Download(ctx, sources, sshParams, privkey, signed, makeCB(dest, c.Bool("preserve"), logger), logger)
+	return lib.Download(
+		ctx,
+		sources,
+		sshParams,
+		privkey,
+		signed,
+		makeCB(
+			dest,
+			c.Bool("preserve"),
+			destExists,
+			destIsDir,
+			logger,
+		),
+		logger,
+	)
 }
 
-func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
+func makeCB(dest string, preserve, destExists, destIsDir bool, l *zap.SugaredLogger) lib.Callback {
 	return func(isDir, endOfDir bool, name string, perms os.FileMode, mtime time.Time, atime time.Time, content io.Reader) error {
-		path := filepath.Join(dest, name)
-
 		if endOfDir && preserve {
+			path := filepath.Join(dest, name)
 			l.Debugw("end of directory", "name", name)
 			err := os.Chmod(path, perms.Perm())
 			if err != nil {
 				l.Infow("failed to chmod directory", "name", path, "error", err)
 			}
+
 			err = os.Chtimes(path, atime, mtime)
 			if err != nil {
 				l.Infow("failed to chtimes directory", "name", path, "error", err)
@@ -185,6 +202,7 @@ func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
 		}
 
 		if isDir {
+			path := filepath.Join(dest, name)
 			l.Debugw("received directory", "name", name)
 			stats, err := os.Stat(path)
 			if err != nil {
@@ -207,6 +225,20 @@ func makeCB(dest string, preserve bool, l *zap.SugaredLogger) lib.Callback {
 				}
 			}
 			return nil
+		}
+		var path string
+		if destIsDir {
+			path = filepath.Join(dest, name)
+		} else if destExists {
+			// destination exists but is not a directory
+			// that means len(sources) is 1
+			// so the operation is just a file copy
+			path = dest
+		} else {
+			// destination does not exist
+			// that means len(sources) is 1
+			// so operation is just a file copy
+			path = dest
 		}
 
 		l.Debugw("received file", "name", name)
