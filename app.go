@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 )
 
@@ -14,6 +16,28 @@ func App() *cli.App {
 		sshCommand(),
 		uploadCommand(),
 		downloadCommand(),
+		{
+			Name: "vis",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name: "flag",
+					Value: "ALL",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				flag := c.String("flag")
+				args := c.Args()
+				if len(args) == 0 {
+					return nil
+				}
+				enc, err := lib.StrVisE(args[0], flag)
+				if err != nil {
+					return cli.NewExitError(err.Error(), 1)
+				}
+				fmt.Print(enc)
+				return nil
+			},
+		},
 	}
 	app.Flags = GlobalFlags()
 	return app

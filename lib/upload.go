@@ -237,8 +237,10 @@ func sendOne(src Source, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.Suga
 	}
 	source := src.(*UploadFileSource)
 	l.Debugw("uploading", "filename", source.Name, "size", source.Size)
-	// TODO: BSD vis encoding
-	sName := strings.Replace(source.Name, "\n", "_", -1)
+	sName := source.Name
+	if strings.Contains(source.Name, "\n") {
+		sName = StrVis(sName, VIS_NL)
+	}
 
 	headerLine := fmt.Sprintf(
 		"C%04o %d %s\n",
