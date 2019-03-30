@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
+	"os"
+	"strings"
 )
 
 // App returns the vssh application object.
@@ -26,15 +28,34 @@ func App() *cli.App {
 			},
 			Action: func(c *cli.Context) error {
 				flag := c.String("flag")
+				iflag, ok := lib.C[strings.ToUpper(flag)]
+				if !ok {
+					return cli.NewExitError("unknown flag", 1)
+				}
+				args := c.Args()
+				if len(args) == 0 {
+					err := lib.StreamVis(os.Stdin, os.Stdout, iflag)
+					if err != nil {
+						return cli.NewExitError(err.Error(), 1)
+					}
+					return nil
+				}
+				fmt.Print(lib.StrVis(strings.Join(args, " "), iflag))
+				return nil
+			},
+		},
+		{
+			Name: "unvis",
+			Action: func(c *cli.Context) error {
 				args := c.Args()
 				if len(args) == 0 {
 					return nil
 				}
-				enc, err := lib.StrVisE(args[0], flag)
+				s, err := lib.StrUnvis(strings.Join(args, " "))
 				if err != nil {
 					return cli.NewExitError(err.Error(), 1)
 				}
-				fmt.Print(enc)
+				fmt.Print(s)
 				return nil
 			},
 		},
