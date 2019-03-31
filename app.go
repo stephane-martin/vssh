@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/stephane-martin/vssh/lib"
-	"github.com/urfave/cli"
 	"os"
 	"strings"
+
+	vis "github.com/stephane-martin/go-vis"
+	"github.com/urfave/cli"
 )
 
 // App returns the vssh application object.
@@ -22,25 +23,25 @@ func App() *cli.App {
 			Name: "vis",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name: "flag",
+					Name:  "flag",
 					Value: "ALL",
 				},
 			},
 			Action: func(c *cli.Context) error {
 				flag := c.String("flag")
-				iflag, ok := lib.C[strings.ToUpper(flag)]
+				iflag, ok := vis.C[strings.ToUpper(flag)]
 				if !ok {
 					return cli.NewExitError("unknown flag", 1)
 				}
 				args := c.Args()
 				if len(args) == 0 {
-					err := lib.StreamVis(os.Stdin, os.Stdout, iflag)
+					err := vis.StreamVis(os.Stdout, os.Stdin, iflag)
 					if err != nil {
 						return cli.NewExitError(err.Error(), 1)
 					}
 					return nil
 				}
-				fmt.Print(lib.StrVis(strings.Join(args, " "), iflag))
+				fmt.Print(vis.StrVis(strings.Join(args, " "), iflag))
 				return nil
 			},
 		},
@@ -49,9 +50,13 @@ func App() *cli.App {
 			Action: func(c *cli.Context) error {
 				args := c.Args()
 				if len(args) == 0 {
+					err := vis.StreamUnvis(os.Stdout, os.Stdin)
+					if err != nil {
+						return cli.NewExitError(err.Error(), 1)
+					}
 					return nil
 				}
-				s, err := lib.StrUnvis(strings.Join(args, " "))
+				s, err := vis.StrUnvis(strings.Join(args, " "))
 				if err != nil {
 					return cli.NewExitError(err.Error(), 1)
 				}

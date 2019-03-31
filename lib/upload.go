@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/awnumar/memguard"
+	vis "github.com/stephane-martin/go-vis"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
@@ -239,7 +240,7 @@ func sendOne(src Source, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.Suga
 	l.Debugw("uploading", "filename", source.Name, "size", source.Size)
 	sName := source.Name
 	if strings.Contains(source.Name, "\n") {
-		sName = StrVis(sName, VIS_NL)
+		sName = vis.StrVis(sName, vis.VIS_NL)
 	}
 
 	headerLine := fmt.Sprintf(

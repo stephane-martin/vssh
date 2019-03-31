@@ -1,4 +1,4 @@
-package lib
+package vis
 
 import (
 	"bufio"
@@ -34,7 +34,6 @@ const (
 	S_CTRL   = 4 /* control char started (^) */
 	S_OCTAL2 = 5 /* octal digit 2 */
 	S_OCTAL3 = 6 /* octal digit 3 */
-
 )
 
 var C = map[string]int{
@@ -77,7 +76,6 @@ func IsVisible(c byte, flag int) bool {
 }
 
 func Vis(dst []byte, c byte, flag int, nextc byte) []byte {
-
 	if IsVisible(c, flag) {
 		if (c == '"' && (flag&VIS_DQ) != 0) || (c == '\\' && (flag&VIS_NOSLASH) == 0) {
 			dst = append(dst, '\\')
@@ -172,7 +170,7 @@ func StrVis(src string, flag int) string {
 	return string(BytesVis(nil, []byte(src), flag))
 }
 
-func StreamVis(r io.Reader, w io.Writer, flag int) error {
+func StreamVis(w io.Writer, r io.Reader, flag int) error {
 	reader := bufio.NewReader(r)
 	buf := make([]byte, 0, 4)
 	var next byte
@@ -198,171 +196,230 @@ func StreamVis(r io.Reader, w io.Writer, flag int) error {
 	}
 }
 
-func unvis(dst *byte, c byte, astate *int, flag int) int {
-	if flag&UNVIS_END != 0 {
-		if *astate == S_OCTAL2 || *astate == S_OCTAL3 {
-			*astate = S_GROUND
-			return UNVIS_VALID
-		}
-		if *astate == S_GROUND {
-			return UNVIS_NOCHAR
-		}
-		return UNVIS_SYNBAD
-	}
+type unvis struct {
+	dst    byte
+	astate int
+}
 
-	switch *astate {
+func (s *unvis) end() (byte, int) {
+	if s.astate == S_OCTAL2 || s.astate == S_OCTAL3 {
+		s.astate = S_GROUND
+		return s.dst, UNVIS_VALID
+	}
+	if s.astate == S_GROUND {
+		return 0, UNVIS_NOCHAR
+	}
+	return 0, UNVIS_SYNBAD
+
+}
+
+func (s *unvis) unvis(c byte) (byte, int) {
+	switch s.astate {
 
 	case S_GROUND:
-		*dst = 0
+		s.dst = 0
 		if c == '\\' {
-			*astate = S_START
-			return 0
+			s.astate = S_START
+			return 0, 0
 		}
-		*dst = c
-		return UNVIS_VALID
+		return c, UNVIS_VALID
 
 	case S_START:
 		switch c {
 		case '-':
-			*dst = 0
-			*astate = S_GROUND
-			return 0
+			s.dst = 0
+			s.astate = S_GROUND
+			return 0, 0
 		case '\\', '"':
-			*dst = c
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return c, UNVIS_VALID
 		case '0', '1', '2', '3', '4', '5', '6', '7':
-			*dst = c - '0'
-			*astate = S_OCTAL2
-			return 0
+			s.dst = c - '0'
+			s.astate = S_OCTAL2
+			return 0, 0
 		case 'M':
-			*dst = 0200
-			*astate = S_META
-			return 0
+			s.dst = 0200
+			s.astate = S_META
+			return 0, 0
 		case '^':
-			*astate = S_CTRL
-			return 0
+			s.astate = S_CTRL
+			return 0, 0
 		case 'n':
-			*dst = '\n'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\n', UNVIS_VALID
 		case 'r':
-			*dst = '\r'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\r', UNVIS_VALID
 		case 'b':
-			*dst = '\b'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\b', UNVIS_VALID
 		case 'a':
-			*dst = '\007'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\007', UNVIS_VALID
 		case 'v':
-			*dst = '\v'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\v', UNVIS_VALID
 		case 't':
-			*dst = '\t'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\t', UNVIS_VALID
 		case 'f':
-			*dst = '\f'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\f', UNVIS_VALID
 		case 's':
-			*dst = ' '
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return ' ', UNVIS_VALID
 		case 'E':
-			*dst = '\033'
-			*astate = S_GROUND
-			return UNVIS_VALID
+			s.dst = 0
+			s.astate = S_GROUND
+			return '\033', UNVIS_VALID
 		case '\n':
-			*astate = S_GROUND
-			return UNVIS_NOCHAR
+			s.astate = S_GROUND
+			return 0, UNVIS_NOCHAR
 		case '$':
-			*astate = S_GROUND
-			return UNVIS_NOCHAR
+			s.astate = S_GROUND
+			return 0, UNVIS_NOCHAR
 		}
-		*astate = S_GROUND
-		return UNVIS_SYNBAD
+		s.astate = S_GROUND
+		return 0, UNVIS_SYNBAD
 
 	case S_META:
 		if c == '-' {
-			*astate = S_META1
+			s.astate = S_META1
 		} else if c == '^' {
-			*astate = S_CTRL
+			s.astate = S_CTRL
 		} else {
-			*astate = S_GROUND
-			return UNVIS_SYNBAD
+			s.astate = S_GROUND
+			return 0, UNVIS_SYNBAD
 		}
-		return 0
+		return 0, 0
 
 	case S_META1:
-		*astate = S_GROUND
-		*dst |= c
-		return UNVIS_VALID
+		s.astate = S_GROUND
+		res := s.dst | c
+		s.dst = 0
+		return res, UNVIS_VALID
 
 	case S_CTRL:
+		s.astate = S_GROUND
+		var res byte
 		if c == '?' {
-			*dst |= 0177
+			res = s.dst | 0177
 		} else {
-			*dst |= c & 037
+			res = s.dst | (c & 037)
 		}
-		*astate = S_GROUND
-		return UNVIS_VALID
+		s.dst = 0
+		return res, UNVIS_VALID
 
 	case S_OCTAL2: /* second possible octal digit */
 		if IsOctal(c) {
-			*dst = (*dst << 3) + (c - '0')
-			*astate = S_OCTAL3
-			return 0
+			s.dst = (s.dst << 3) + (c - '0')
+			s.astate = S_OCTAL3
+			return 0, 0
 		}
-		*astate = S_GROUND
-		return UNVIS_VALIDPUSH
+		s.astate = S_GROUND
+		res := s.dst
+		s.dst = 0
+		return res, UNVIS_VALIDPUSH
 
 	case S_OCTAL3: /* third possible octal digit */
-		*astate = S_GROUND
+		s.astate = S_GROUND
 		if IsOctal(c) {
-			*dst = (*dst << 3) + (c - '0')
-			return UNVIS_VALID
+			res := (s.dst << 3) + (c - '0')
+			s.dst = 0
+			return res, UNVIS_VALID
 		}
-		return UNVIS_VALIDPUSH
+		res := s.dst
+		s.dst = 0
+		return res, UNVIS_VALIDPUSH
 
 	default:
-		*astate = S_GROUND
-		return UNVIS_SYNBAD
+		s.astate = S_GROUND
+		return 0, UNVIS_SYNBAD
 	}
 }
 
 func BytesUnvis(dst, src []byte) ([]byte, error) {
+	dst = dst[0:0]
 	if len(src) == 0 {
-		return dst[0:0], nil
+		return dst, nil
 	}
-	var i, state int
-	var c byte
-	dst = append(dst[0:0], 0)
-
+	var (
+		c, res byte
+		s      unvis
+		flg    int
+	)
 	for _, c = range src {
 	again:
-		switch unvis(&dst[i], c, &state, 0) {
+		res, flg = s.unvis(c)
+		switch flg {
 		case UNVIS_VALID:
-			dst = append(dst, 0)
-			i++
+			dst = append(dst, res)
 		case UNVIS_VALIDPUSH:
-			dst = append(dst, 0)
-			i++
+			dst = append(dst, res)
 			goto again
 		case 0, UNVIS_NOCHAR:
 		default:
 			return dst[0:0], errors.New("can't decode")
 		}
 	}
-	if unvis(&dst[i], c, &state, UNVIS_END) == UNVIS_VALID {
-		return dst, nil
+	if res, flg = s.end(); flg == UNVIS_VALID {
+		dst = append(dst, res)
 	}
-	return dst[0:len(dst)-1], nil
+	return dst, nil
+}
+
+func StreamUnvis(w io.Writer, r io.Reader) error {
+	reader := bufio.NewReader(r)
+	sbuf := make([]byte, 1)
+	var (
+		c, res byte
+		s      unvis
+		err    error
+		flg    int
+	)
+	for {
+		c, err = reader.ReadByte()
+		if err == io.EOF {
+			if res, flg = s.end(); flg == UNVIS_VALID {
+				sbuf[0] = res
+				_, err = w.Write(sbuf)
+				return err
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	again:
+		res, flg = s.unvis(c)
+		switch flg {
+		case UNVIS_VALID:
+			sbuf[0] = res
+			_, err = w.Write(sbuf)
+			if err != nil {
+				return err
+			}
+		case UNVIS_VALIDPUSH:
+			sbuf[0] = res
+			_, err = w.Write(sbuf)
+			if err != nil {
+				return err
+			}
+			goto again
+		case 0, UNVIS_NOCHAR:
+		default:
+			return errors.New("can't decode")
+		}
+	}
 }
 
 func StrUnvis(src string) (string, error) {

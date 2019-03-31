@@ -26,6 +26,10 @@
   name = "github.com/valyala/fastjson"
   version = "1.4.1"
 
+[[constraint]]
+  name = "github.com/stephane-martin/go-vis"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true
