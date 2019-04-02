@@ -22,7 +22,7 @@ const (
 func sshCommand() cli.Command {
 	return cli.Command{
 		Name:   "ssh",
-		Usage:  "SSH to remote server",
+		Usage:  "connect to remote server with SSH using Vault for authentication",
 		Action: sshAction,
 		Flags: []cli.Flag{
 			cli.StringFlag{
@@ -128,7 +128,7 @@ func sshAction(c *cli.Context) (e error) {
 	}
 
 	// unset env VAULT_ADDR to prevent the vault client from seeing it
-	os.Unsetenv("VAULT_ADDR")
+	_ = os.Unsetenv("VAULT_ADDR")
 
 	client, err := vexec.Auth(
 		ctx,

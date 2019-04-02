@@ -2,6 +2,7 @@ package lib
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,24 +13,15 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func GoSSH(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
-	c, err := gssh.ParseCertificate(cert.Buffer())
-	if err != nil {
-		return err
-	}
-	s, err := ssh.ParsePrivateKey(privkey.Buffer())
-	if err != nil {
-		return err
-	}
-	signer, err := ssh.NewCertSigner(c, s)
-	if err != nil {
-		return err
+func GoConnectAuth(ctx context.Context, sshParams SSHParams, auth []ssh.AuthMethod, env map[string]string, l *zap.SugaredLogger) error {
+	if len(auth) == 0 {
+		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
 		User: sshParams.LoginName,
 		Host: sshParams.Host,
 		Port: sshParams.Port,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		Auth: auth,
 	}
 	hkcb, err := MakeHostKeyCallback(sshParams.Insecure, l)
 	if err != nil {
@@ -54,4 +46,20 @@ func GoSSH(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.Loc
 		return fmt.Errorf("failed to execute command: %s", err)
 	}
 	return nil
+}
+
+func GoConnect(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+	c, err := gssh.ParseCertificate(cert.Buffer())
+	if err != nil {
+		return err
+	}
+	s, err := ssh.ParsePrivateKey(privkey.Buffer())
+	if err != nil {
+		return err
+	}
+	signer, err := ssh.NewCertSigner(c, s)
+	if err != nil {
+		return err
+	}
+	return GoConnectAuth(ctx, sshParams, []ssh.AuthMethod{ssh.PublicKeys(signer)}, env, l)
 }

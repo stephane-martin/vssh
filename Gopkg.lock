@@ -130,12 +130,48 @@
   version = "v1.1.0"
 
 [[projects]]
+  digest = "1:38d2e838817528fd7d1ccdf7fa6700ee0f1727b3c484d13cab54bfbdaab12b0e"
+  name = "github.com/karrick/godirwalk"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "6d1c7760ec857d2984abe0a23fa263877f50d3f0"
+  version = "v1.8.0"
+
+[[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
   name = "github.com/konsorten/go-windows-terminal-sequences"
   packages = ["."]
   pruneopts = "UT"
   revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
   version = "v1.0.2"
+
+[[projects]]
+  digest = "1:9cedee824c21326bd26950bd9e1ffe9dc4e7ca03dc8634d0e6f954ee6a383172"
+  name = "github.com/kr/fs"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "1455def202f6e05b95cc7bfc7e8ae67ae5141eba"
+  version = "v0.1.0"
+
+[[projects]]
+  digest = "1:d77d385848f3d33ae4e8470628bfc2a9ce43f0cf9015710cf4ca085b90f8d3a6"
+  name = "github.com/ktr0731/go-fuzzyfinder"
+  packages = [
+    ".",
+    "matching",
+    "scoring",
+  ]
+  pruneopts = "UT"
+  revision = "f088c6b95f50ac4527acc1163025c2b2ff76fd1a"
+  version = "v0.1.2"
+
+[[projects]]
+  digest = "1:0356f3312c9bd1cbeda81505b7fd437501d8e778ab66998ef69f00d7f9b3a0d7"
+  name = "github.com/mattn/go-runewidth"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "3ee7d812e62a0804a7d0a324e0249ca2db3476d3"
+  version = "v0.0.4"
 
 [[projects]]
   digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
@@ -162,6 +198,14 @@
   version = "v17.03.2-ce-rc1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:e4f1b6b3c33388b1f6f3d630280d9b0870c1e2f80379dfd2f89dd06425e9e6b9"
+  name = "github.com/nsf/termbox-go"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "288510b9734e30e7966ec2f22b87c5f8e67345e3"
+
+[[projects]]
   digest = "1:d886a3c32c8c1a770d07e36340f061d3afc948d065ffc3c9a19b01b34d4f0b65"
   name = "github.com/pierrec/lz4"
   packages = [
@@ -171,6 +215,22 @@
   pruneopts = "UT"
   revision = "315a67e90e415bcdaff33057da191569bf4d8479"
   version = "v2.1.1"
+
+[[projects]]
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
+
+[[projects]]
+  digest = "1:6c187bc42f50a341b0dd25da7f5bcf84b4bbffa7193b92f3c983c1a9803a447a"
+  name = "github.com/pkg/sftp"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a713b07e6d90e1831d7fefcb69f1310edb3783ae"
+  version = "v1.10.0"
 
 [[projects]]
   digest = "1:6baa565fe16f8657cf93469b2b8a6c61a277827734400d27e44d589547297279"
@@ -189,12 +249,12 @@
   revision = "21a848b7a7621d1ab718662f1b1b41ce7f7b097f"
 
 [[projects]]
-  digest = "1:2b8114b3fbf4995ede919fc7e357cb770c67111b4417d974a65f3adc216c8edf"
+  digest = "1:28f641e2e8203d9b2e260129184057924578c23da212bf6f3be06a3022b5fa3f"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "790cb846f48ea004f7bd22af9a6f1827c5f146b2"
-  version = "v0.5.5"
+  revision = "a308676068c891894645c8a167c806ce93f8067e"
+  version = "v0.5.6"
 
 [[projects]]
   digest = "1:ab93e2cd3289b7ba468d925f6f21ad06d8faf149e8bcc339fb73386a749ea999"
@@ -344,7 +404,10 @@
     "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
     "github.com/hashicorp/vault/helper/consts",
+    "github.com/karrick/godirwalk",
+    "github.com/ktr0731/go-fuzzyfinder",
     "github.com/mitchellh/go-homedir",
+    "github.com/pkg/sftp",
     "github.com/stephane-martin/go-vis",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",

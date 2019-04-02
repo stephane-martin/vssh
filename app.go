@@ -1,11 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"strings"
-
-	vis "github.com/stephane-martin/go-vis"
 	"github.com/urfave/cli"
 )
 
@@ -17,53 +12,8 @@ func App() *cli.App {
 	app.Version = Version
 	app.Commands = []cli.Command{
 		sshCommand(),
-		uploadCommand(),
-		downloadCommand(),
-		{
-			Name: "vis",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "flag",
-					Value: "ALL",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				flag := c.String("flag")
-				iflag, ok := vis.C[strings.ToUpper(flag)]
-				if !ok {
-					return cli.NewExitError("unknown flag", 1)
-				}
-				args := c.Args()
-				if len(args) == 0 {
-					err := vis.StreamVis(os.Stdout, os.Stdin, iflag)
-					if err != nil {
-						return cli.NewExitError(err.Error(), 1)
-					}
-					return nil
-				}
-				fmt.Print(vis.StrVis(strings.Join(args, " "), iflag))
-				return nil
-			},
-		},
-		{
-			Name: "unvis",
-			Action: func(c *cli.Context) error {
-				args := c.Args()
-				if len(args) == 0 {
-					err := vis.StreamUnvis(os.Stdout, os.Stdin)
-					if err != nil {
-						return cli.NewExitError(err.Error(), 1)
-					}
-					return nil
-				}
-				s, err := vis.StrUnvis(strings.Join(args, " "))
-				if err != nil {
-					return cli.NewExitError(err.Error(), 1)
-				}
-				fmt.Print(s)
-				return nil
-			},
-		},
+		scpCommand(),
+		sftpCommand(),
 	}
 	app.Flags = GlobalFlags()
 	return app
@@ -117,7 +67,7 @@ func GlobalFlags() []cli.Flag {
 		cli.StringFlag{
 			Name:   "vault-ssh-role,role",
 			Usage:  "Vault signing role",
-			EnvVar: "VAULT_SIGNING_ROLE",
+			EnvVar: "VAULT_SSH_ROLE",
 		},
 		cli.StringFlag{
 			Name:  "loglevel",

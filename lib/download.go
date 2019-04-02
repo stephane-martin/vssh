@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/pkg/sftp"
 	"io"
 	"io/ioutil"
 	"os"
@@ -20,10 +21,195 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Callback is a function type that is used by Download to return the remote SSH directories and files.
+// Callback is a function type that is used by ScpGet to return the remote SSH directories and files.
 type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
 
-func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) ([]Entry, error) {
+	if len(auth) == 0 {
+		return nil, errors.New("no auth method")
+	}
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: auth,
+	}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return nil, err
+	}
+	cfg.HostKey = hkcb
+
+	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = conn.Close() }()
+
+	client, err := sftp.NewClient(conn)
+	if err != nil {
+		return nil, err
+	}
+
+	stopping := make(chan struct{})
+	defer close(stopping)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-stopping:
+		}
+		_ = client.Close()
+	}()
+
+	var list []Entry
+	walker := client.Walk(".")
+	for walker.Step() {
+		path := walker.Path()
+		infos := walker.Stat()
+		if walker.Err() == nil && path != "." && (infos.IsDir() || infos.Mode().IsRegular()) {
+			list = append(list, Entry{
+				Path: path,	// TODO
+				RelName: path,
+				IsDir: infos.IsDir(),
+			})
+		}
+	}
+	return list, nil
+}
+
+func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
+	if len(srcs) == 0 {
+		return nil
+	}
+	if len(auth) == 0 {
+		return errors.New("no auth method")
+	}
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: auth,
+	}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
+	}
+	cfg.HostKey = hkcb
+
+	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	client, err := sftp.NewClient(conn)
+	if err != nil {
+		return err
+	}
+
+	stopping := make(chan struct{})
+	defer close(stopping)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-stopping:
+		}
+		_ = client.Close()
+	}()
+
+	sendFile := func(base, filename string, st os.FileInfo) error {
+		relFilename, err := filepath.Rel(base, filename)
+		if err != nil {
+			return err
+		}
+		f, err := client.Open(filename)
+		if err != nil {
+			return err
+		}
+		err = cb(false, false, relFilename, st.Mode().Perm(), st.ModTime(), time.Now(), f)
+		_ = f.Close()
+		return err
+	}
+
+	var sendDir func(string, string, os.FileInfo) error
+	sendDir = func(base, dirname string, st os.FileInfo) error {
+		infos, err := client.ReadDir(dirname)
+		if err != nil {
+			return err
+		}
+		relDirname, err := filepath.Rel(base, dirname)
+		if err != nil {
+			return err
+		}
+		err = cb(true, false, relDirname, st.Mode().Perm(), st.ModTime(), time.Now(), nil)
+		if err != nil {
+			return err
+		}
+		for _, info := range infos {
+			if info.IsDir() {
+				if err := sendDir(base, filepath.Join(dirname, info.Name()), info); err != nil {
+					return err
+				}
+			} else if info.Mode().IsRegular() {
+				filename := filepath.Join(dirname, info.Name())
+				if err := sendFile(base, filename, info); err != nil {
+					return err
+				}
+			}
+		}
+		return cb(true, true, relDirname, st.Mode().Perm(), st.ModTime(), time.Time{}, nil)
+	}
+
+	for _, src := range srcs {
+		stats, err := client.Stat(src)
+		if err != nil {
+			return err
+		}
+		if stats.IsDir() {
+			if err := sendDir(filepath.Dir(src), src, stats); err != nil {
+				return err
+			}
+		} else if stats.Mode().IsRegular() {
+			if err := sendFile(filepath.Dir(src), src, stats); err != nil {
+				return err
+			}
+		}
+	}
+
+
+	return nil
+}
+
+func ScpGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
+	if len(srcs) == 0 {
+		return nil
+	}
+	if len(auth) == 0 {
+		return errors.New("no auth method")
+	}
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: auth,
+	}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
+	}
+	cfg.HostKey = hkcb
+	client := gssh.NewClient(cfg)
+
+	for _, source := range srcs {
+		err := receive(ctx, client, source, cb, l)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ScpGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
 	c, err := gssh.ParseCertificate(cert.Buffer())
 	if err != nil {
 		return err
@@ -36,27 +222,40 @@ func Download(ctx context.Context, srcs []string, params SSHParams, privkey, cer
 	if err != nil {
 		return err
 	}
-	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
-	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	return ScpGetAuth(ctx, srcs, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, cb, l)
+}
+
+func SFTPGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+	c, err := gssh.ParseCertificate(cert.Buffer())
 	if err != nil {
 		return err
 	}
-	cfg.HostKey = hkcb
-
-	client := gssh.NewClient(cfg)
-
-	for _, source := range srcs {
-		err := receive(ctx, client, source, cb, l)
-		if err != nil {
-			return err
-		}
+	s, err := ssh.ParsePrivateKey(privkey.Buffer())
+	if err != nil {
+		return err
 	}
-	return nil
+	signer, err := ssh.NewCertSigner(c, s)
+	if err != nil {
+		return err
+	}
+	return SFTPGetAuth(ctx, srcs, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, cb, l)
+}
+
+func SFTPList(ctx context.Context, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) ([]Entry, error) {
+	c, err := gssh.ParseCertificate(cert.Buffer())
+	if err != nil {
+		return nil, err
+	}
+	s, err := ssh.ParsePrivateKey(privkey.Buffer())
+	if err != nil {
+		return nil, err
+	}
+	signer, err := ssh.NewCertSigner(c, s)
+	if err != nil {
+		return nil, err
+	}
+	return SFTPListAuth(ctx, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
+
 }
 
 func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *zap.SugaredLogger) error {
@@ -78,8 +277,7 @@ func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *
 	go func() {
 		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
 	}()
-	bstdout := bufio.NewReader(stdout)
-	err = receiveOne(stdin, bstdout, src, "", cb, l)
+	err = receiveOne(stdin, bufio.NewReader(stdout), src, "", cb, l)
 	if err != nil {
 		_ = stdin.Close()
 		cancel()
@@ -146,7 +344,7 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 			}
 			return fmt.Errorf("unexpected response: %s", string(line))
 		}
-
+		// TODO: check that the downloaded names match the user request
 		splits := bytes.Fields(line)
 		if len(splits) < 3 {
 			return errors.New("invalid header line")
@@ -174,6 +372,7 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 
 		if msg == 'D' {
 			dirPath := filepath.Join(lPath, target)
+			l.Debugw("scp received dir", "target", target, "lpath", lPath, "dirpath", dirPath)
 			err := cb(true, false, dirPath, os.FileMode(perms), mtime, atime, nil)
 			if err != nil {
 				return err
@@ -194,7 +393,9 @@ func receiveOne(stdin io.Writer, stdout *bufio.Reader, src, lPath string, cb Cal
 		// if msg == 'C'
 		_ = ack(stdin)
 		lr := &io.LimitedReader{R: stdout, N: size}
-		err = cb(false, false, filepath.Join(lPath, target), os.FileMode(perms), mtime, atime, lr)
+		filePath := filepath.Join(lPath, target)
+		l.Debugw("scp received file", "target", target, "lpath", lPath, "filepath", filePath)
+		err = cb(false, false, filePath, os.FileMode(perms), mtime, atime, lr)
 		if err != nil {
 			return err
 		}

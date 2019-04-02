@@ -40,7 +40,7 @@ type Config struct {
 	HostKey       ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
 }
 
-func (cfg Config) version() string {
+func (cfg Config) Version() string {
 	if cfg.ClientVersion != "" {
 		return cfg.ClientVersion
 	}
@@ -68,15 +68,15 @@ func (cfg Config) hostKey() ssh.HostKeyCallback {
 	return ssh.InsecureIgnoreHostKey()
 }
 
-func (cfg Config) addr() string {
+func (cfg Config) Addr() string {
 	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.port()))
 }
 
-func (cfg Config) native() *ssh.ClientConfig {
+func (cfg Config) Native() *ssh.ClientConfig {
 	return &ssh.ClientConfig{
 		User:            cfg.User,
 		Auth:            cfg.Auth,
-		ClientVersion:   cfg.version(),
+		ClientVersion:   cfg.Version(),
 		HostKeyCallback: cfg.hostKey(),
 		Timeout:         cfg.timeout(),
 	}
@@ -178,7 +178,7 @@ func newSession(config Config) (*ssh.Session, *ssh.Client, error) {
 	var conn *ssh.Client
 	var err error
 	for i := config.DialRetry + 1; i > 0; i-- {
-		conn, err = ssh.Dial("tcp", config.addr(), config.native())
+		conn, err = ssh.Dial("tcp", config.Addr(), config.Native())
 		if err == nil {
 			break
 		}

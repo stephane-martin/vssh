@@ -38,7 +38,7 @@ func writeKey(path string, key *memguard.LockedBuffer) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(bytes.Trim(key.Buffer(), "\n"))
 	if err != nil {
 		return err
@@ -47,26 +47,26 @@ func writeKey(path string, key *memguard.LockedBuffer) error {
 	return err
 }
 
-func Native(ctx context.Context, sshParams SSHParams, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func NativeConnect(ctx context.Context, sshParams SSHParams, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
 	}
 	l.Debugw("using temp directory", "dirname", dir)
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	pubkeyPath, err := writePubkey(dir, pub)
-	defer os.Remove(pubkeyPath)
+	defer func() { _ = os.Remove(pubkeyPath) }()
 	if err != nil {
 		return err
 	}
 	privkeyPath, err := writePrivkey(dir, priv)
-	defer os.Remove(privkeyPath)
+	defer func() { _ = os.Remove(privkeyPath) }()
 	if err != nil {
 		return err
 	}
 	certPath, err := writeCert(dir, cert)
-	defer os.Remove(certPath)
+	defer func() { _ = os.Remove(certPath) }()
 	if err != nil {
 		return err
 	}

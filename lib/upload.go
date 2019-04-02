@@ -11,7 +11,8 @@ import (
 	"strings"
 
 	"github.com/awnumar/memguard"
-	vis "github.com/stephane-martin/go-vis"
+	"github.com/pkg/sftp"
+	"github.com/stephane-martin/go-vis"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
@@ -40,7 +41,7 @@ func (s *UploadFileSource) Close() error {
 }
 
 type UploadDirSource struct {
-	Name string
+	Path string
 }
 
 func (s *UploadDirSource) IsSource()    {}
@@ -55,6 +56,7 @@ func hasDir(s []Source) bool {
 	return false
 }
 
+// TODO: support globs
 func MakeSource(filename string) (Source, error) {
 	var err error
 	filename, err = filepath.Abs(filename)
@@ -71,7 +73,7 @@ func MakeSource(filename string) (Source, error) {
 	}
 	if infos.IsDir() {
 		_ = f.Close()
-		return &UploadDirSource{Name: filename}, nil
+		return &UploadDirSource{Path: filename}, nil
 	}
 	if infos.Mode().IsRegular() {
 		return &UploadFileSource{
@@ -85,7 +87,225 @@ func MakeSource(filename string) (Source, error) {
 	return nil, fmt.Errorf("is not a regular file: %s", filename)
 }
 
-func Upload(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	remotePath = strings.TrimSpace(remotePath)
+	if remotePath == "" {
+		remotePath = "."
+	}
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: auth,
+	}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
+	}
+	cfg.HostKey = hkcb
+
+	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	client, err := sftp.NewClient(conn)
+	if err != nil {
+		return err
+	}
+
+	stopping := make(chan struct{})
+	defer close(stopping)
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-stopping:
+		}
+		_ = client.Close()
+	}()
+
+	var destExists, destIsDir bool
+
+	if len(sources) > 1 {
+		stats, err := client.Stat(remotePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("no such file or directory: %s", remotePath)
+			}
+			return err
+		}
+		if !stats.IsDir() {
+			return fmt.Errorf("not a directory: %s", remotePath)
+		}
+		destExists = true
+		destIsDir = true
+	} else {
+		_, sourceIsDir := sources[0].(*UploadDirSource)
+		stats, err := client.Stat(remotePath)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			destExists = true
+			destIsDir = stats.IsDir()
+		}
+		if sourceIsDir && destExists && !destIsDir {
+			return fmt.Errorf("not a directory: %s", remotePath)
+		}
+	}
+
+	for _, source := range sources {
+		var rpath string
+		if ds, ok := source.(*UploadDirSource); ok {
+			// we upload a directory
+			if destExists {
+				// destination exists, and is a directory
+				rpath = filepath.Join(remotePath, filepath.Base(ds.Path))
+			} else {
+				// destination does not exist
+				// ==> len(sources) is 1
+				rpath = remotePath
+			}
+		}
+		if fs, ok := source.(*UploadFileSource); ok {
+			if destIsDir {
+				// we upload a file, destination exists and is a directory
+				rpath = filepath.Join(remotePath, fs.Name)
+			} else if destExists {
+				// we upload a file, destination exists but is not a directory
+				rpath = remotePath
+			} else {
+				// we upload a file, destination does not exist
+				// ==> len(sources) is 1
+				rpath = remotePath
+			}
+		}
+
+		// upload a simple file
+		if fs, ok := source.(*UploadFileSource); ok {
+			f, err := client.Create(rpath)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(f, fs.Reader)
+			_ = f.Close()
+			if err != nil {
+				return err
+			}
+		}
+
+		// upload directory
+		if ds, ok := source.(*UploadDirSource); ok {
+			if !destExists {
+				if err := client.Mkdir(rpath); err != nil {
+					return err
+				}
+			}
+			// walk the source directory
+			if err := filepath.Walk(ds.Path, func(path string, info os.FileInfo, e error) error {
+				if e != nil {
+					l.Infow("error walking directory", "path", path, "error", e)
+					return nil
+				}
+				relPath, e := filepath.Rel(ds.Path, path)
+				if e != nil {
+					return e
+				}
+				p := filepath.Join(rpath, relPath)
+				if info.IsDir() {
+					// make the remote directory
+					return client.MkdirAll(p)
+				} else if info.Mode().IsRegular() {
+					fs, e := os.Open(path)
+					if e != nil {
+						return e
+					}
+					fd, e := client.Create(p)
+					if e != nil {
+						_ = fs.Close()
+						return e
+					}
+					_, e = io.Copy(fd, fs)
+					_ = fd.Close()
+					_ = fs.Close()
+					return e
+				} else {
+					l.Debugw("not uploading irregular file", "filename", path)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+
+		}
+	}
+
+	return nil
+
+}
+
+func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	remotePath = strings.TrimSpace(remotePath)
+	if remotePath == "" {
+		remotePath = "."
+	}
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: auth,
+	}
+	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return err
+	}
+	cfg.HostKey = hkcb
+
+	client := gssh.NewClient(cfg)
+
+	opts := "-q -t"
+	if hasDir(sources) {
+		opts += " -r"
+	}
+	if len(sources) > 1 {
+		opts += " -d"
+	}
+	var p string
+	if remotePath == "-" {
+		p = "-- -"
+	} else {
+		p = EscapeString(remotePath)
+	}
+	command := fmt.Sprintf("scp %s %s", opts, p)
+	l.Debugw("remote command", "cmd", command)
+	stdin, stdout, stderr, err := client.Start(ctx, command)
+	if err != nil {
+		return err
+	}
+	go func() {
+		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
+	}()
+	bufStdout := bufio.NewReader(stdout)
+
+	for _, source := range sources {
+		err := sendOne(source, stdin, bufStdout, l)
+		if err != nil {
+			_ = stdin.Close()
+			return err
+		}
+	}
+	_ = stdin.Close()
+	l.Debugw("waiting for remote process")
+	return client.Wait()
+}
+
+func ScpPut(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // close the SSH session
@@ -105,59 +325,30 @@ func Upload(ctx context.Context, sources []Source, remotePath string, params SSH
 	if err != nil {
 		return err
 	}
-	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: []ssh.AuthMethod{ssh.PublicKeys(signer)},
-	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
-	if err != nil {
-		return err
-	}
-	cfg.HostKey = hkcb
+	return ScpPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
+}
 
-	client := gssh.NewClient(cfg)
-
-	remotePath = strings.TrimSpace(remotePath)
-	if remotePath == "" {
-		remotePath = "."
-	}
-
-	opts := "-q -t"
-	if hasDir(sources) {
-		opts += " -r"
-	}
-	if len(sources) > 1 {
-		opts += " -d"
-	}
-	var p string
-	if remotePath == "-" {
-		p = "-- -"
-	} else {
-		p = EscapeString(remotePath)
-	}
-	command := fmt.Sprintf("scp %s %s", opts, p)
-	l.Debugw("remote command", "cmd", command)
-	stdin, stdout, stderr, err := client.Start(lctx, command)
-	if err != nil {
-		return err
-	}
-	go func() {
-		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
-	}()
-	bstdout := bufio.NewReader(stdout)
-
-	for _, source := range sources {
-		err := sendOne(source, stdin, bstdout, l)
-		if err != nil {
-			_ = stdin.Close()
-			return err
+func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+	lctx, cancel := context.WithCancel(ctx)
+	defer func() {
+		cancel() // close the SSH session
+		for _, s := range sources {
+			_ = s.Close()
 		}
+	}()
+	c, err := gssh.ParseCertificate(cert.Buffer())
+	if err != nil {
+		return err
 	}
-	_ = stdin.Close()
-	l.Debugw("waiting for remote process")
-	return client.Wait()
+	s, err := ssh.ParsePrivateKey(privkey.Buffer())
+	if err != nil {
+		return err
+	}
+	signer, err := ssh.NewCertSigner(c, s)
+	if err != nil {
+		return err
+	}
+	return SFTPPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
 }
 
 func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.SugaredLogger) error {
@@ -171,7 +362,10 @@ func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.
 		return err
 	}
 	l.Debugw("uploading directory", "name", dirname)
-	sName := strings.Replace(filepath.Base(dirname), "\n", "_", -1)
+	sName := filepath.Base(dirname)
+	if strings.Contains(sName, "\n") {
+		sName = vis.StrVis(sName, vis.VIS_NL)
+	}
 	if sName == "/" {
 		sName = ""
 	}
@@ -197,6 +391,7 @@ func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.
 	if err != nil {
 		return err
 	}
+	// TODO: filter out irregular files
 	for _, fname := range filenames {
 		fname = filepath.Join(dirname, fname)
 		s, err := MakeSource(fname)
@@ -234,7 +429,7 @@ func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.
 func sendOne(src Source, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.SugaredLogger) error {
 	defer func() { _ = src.Close() }()
 	if source, ok := src.(*UploadDirSource); ok {
-		return sendDir(source.Name, stdin, stdout, l)
+		return sendDir(source.Path, stdin, stdout, l)
 	}
 	source := src.(*UploadFileSource)
 	l.Debugw("uploading", "filename", source.Name, "size", source.Size)

@@ -143,12 +143,12 @@ func ReadPrivateKey(ctx context.Context, path string, vpath string, client *api.
 		path = p
 	}
 	if path != "" {
-		return ReadPrivateKeyFS(path)
+		return ReadPrivateKeyFromFileSystem(path)
 	}
-	return ReadPrivateKeyVault(ctx, vpath, client, l)
+	return ReadPrivateKeyFromVault(ctx, vpath, client, l)
 }
 
-func ReadPrivateKeyVault(ctx context.Context, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
+func ReadPrivateKeyFromVault(ctx context.Context, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
 	m, err := GetSecretsFromVault(ctx, client, []string{vpath}, false, false, l)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func ReadPrivateKeyVault(ctx context.Context, vpath string, client *api.Client, 
 	return nil, errors.New("private key not found in Vault")
 }
 
-func ReadPrivateKeyFS(path string) (*memguard.LockedBuffer, error) {
+func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 	infos, err := os.Stat(path)
 	if err != nil {
 		return nil, err

@@ -16,7 +16,7 @@
 
 [[constraint]]
   name = "github.com/stephane-martin/golang-ssh"
-  version = "0.5.5"
+  version = "0.5.6"
 
 [[constraint]]
   name = "github.com/awnumar/memguard"
@@ -29,6 +29,18 @@
 [[constraint]]
   name = "github.com/stephane-martin/go-vis"
   branch = "master"
+
+[[constraint]]
+  name = "github.com/ktr0731/go-fuzzyfinder"
+  version = "0.1.2"
+
+[[constraint]]
+  name = "github.com/pkg/sftp"
+  version = "1.10.0"
+
+[[constraint]]
+  name = "github.com/mattn/go-shellwords"
+  version = "1.0.5"
 
 [prune]
   go-tests = true
