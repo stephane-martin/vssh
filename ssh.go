@@ -3,10 +3,8 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/signal"
-	"os/user"
 	"strings"
 	"syscall"
 
@@ -98,7 +96,7 @@ func sshAction(c *cli.Context) (e error) {
 		}
 	}()
 
-	vaultParams := lib.GetVaultParams(c)
+	vaultParams := getVaultParams(c)
 	if vaultParams.SSHMount == "" {
 		return errors.New("empty SSH mount point")
 	}
@@ -126,26 +124,9 @@ func sshAction(c *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-
-	// unset env VAULT_ADDR to prevent the vault client from seeing it
-	_ = os.Unsetenv("VAULT_ADDR")
-
-	client, err := vexec.Auth(
-		ctx,
-		vaultParams.AuthMethod,
-		vaultParams.Address,
-		vaultParams.AuthPath,
-		vaultParams.Token,
-		vaultParams.Username,
-		vaultParams.Password,
-		logger,
-	)
+	client, privkey, signed, pubkey, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
-		return fmt.Errorf("auth failed: %s", err)
-	}
-	err = vexec.CheckHealth(ctx, client)
-	if err != nil {
-		return fmt.Errorf("Vault health check error: %s", err)
+		return err
 	}
 
 	secretPaths := c.StringSlice("secret")
@@ -158,50 +139,5 @@ func sshAction(c *cli.Context) (e error) {
 		secrets = res
 	}
 
-	privkey, err := lib.ReadPrivateKey(ctx, c.String("privkey"), c.String("vprivkey"), client, logger)
-	if err != nil {
-		return fmt.Errorf("failed to read private key: %s", err)
-	}
-	pubkey, err := lib.DerivePublicKey(privkey)
-	if err != nil {
-		return fmt.Errorf("error extracting public key: %s", err)
-	}
-
-	signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client, logger)
-	if err != nil {
-		return fmt.Errorf("signing error: %s", err)
-	}
-
 	return lib.Connect(ctx, sshParams, privkey, signed, pubkey, secrets, logger)
-}
-
-func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams, err error) {
-	p.Verbose = verbose
-	p.Host = strings.TrimSpace(args[0])
-	if p.Host == "" {
-		return p, errors.New("empty host")
-	}
-	spl := strings.SplitN(p.Host, "@", 2)
-	if len(spl) == 2 {
-		p.LoginName = spl[0]
-		p.Host = spl[1]
-	}
-	if p.LoginName == "" {
-		p.LoginName = c.String("login")
-		if p.LoginName == "" {
-			u, err := user.Current()
-			if err != nil {
-				return p, err
-			}
-			p.LoginName = u.Username
-		}
-	}
-	p.Commands = args[1:]
-
-	p.Insecure = c.Bool("insecure")
-	p.Port = c.Int("ssh-port")
-	p.Native = c.Bool("native")
-	p.ForceTerminal = c.Bool("terminal")
-
-	return p, nil
 }

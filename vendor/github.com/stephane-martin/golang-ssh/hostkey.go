@@ -1,4 +1,4 @@
-package lib
+package ssh
 
 import (
 	"bytes"
@@ -6,12 +6,11 @@ import (
 	"net"
 
 	"github.com/mitchellh/go-homedir"
-	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-func MakeHostKeyCallback(insecure bool, l *zap.SugaredLogger) (ssh.HostKeyCallback, error) {
+func MakeHostKeyCallback(insecure bool, l Logger) (ssh.HostKeyCallback, error) {
 	if insecure {
 		hkcb := func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			l.Debugw(

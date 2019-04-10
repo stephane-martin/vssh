@@ -37,6 +37,22 @@
   version = "v1.0.2"
 
 [[projects]]
+  digest = "1:9cedee824c21326bd26950bd9e1ffe9dc4e7ca03dc8634d0e6f954ee6a383172"
+  name = "github.com/kr/fs"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "1455def202f6e05b95cc7bfc7e8ae67ae5141eba"
+  version = "v0.1.0"
+
+[[projects]]
+  digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
+  name = "github.com/mitchellh/go-homedir"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "af06845cf3004701891bf4fdb884bfe4920b3727"
+  version = "v1.1.0"
+
+[[projects]]
   digest = "1:0fd364cae8f486496f036edb44e322ffb4523fbb6ad1404d512623181fdff6c1"
   name = "github.com/moby/moby"
   packages = ["pkg/term"]
@@ -45,8 +61,24 @@
   version = "v17.03.2-ce-rc1"
 
 [[projects]]
+  digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ba968bfe8b2f7e042a574c888954fccecfa385b4"
+  version = "v0.8.1"
+
+[[projects]]
+  digest = "1:6c187bc42f50a341b0dd25da7f5bcf84b4bbffa7193b92f3c983c1a9803a447a"
+  name = "github.com/pkg/sftp"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a713b07e6d90e1831d7fefcb69f1310edb3783ae"
+  version = "v1.10.0"
+
+[[projects]]
   branch = "master"
-  digest = "1:e86b06b02faaecaa9eb62062d3e7b65b58399b65a86056dbad6be5e5857e4598"
+  digest = "1:48f4970b272e3df27cfe72b6fe973976779d273c12473a3c6430c1e99235f827"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -56,6 +88,7 @@
     "internal/subtle",
     "poly1305",
     "ssh",
+    "ssh/knownhosts",
     "ssh/terminal",
   ]
   pruneopts = "UT"
@@ -77,8 +110,11 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/mitchellh/go-homedir",
     "github.com/moby/moby/pkg/term",
+    "github.com/pkg/sftp",
     "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/knownhosts",
     "golang.org/x/crypto/ssh/terminal",
   ]
   solver-name = "gps-cdcl"

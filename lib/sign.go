@@ -6,12 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"runtime"
+
+	"go.uber.org/zap"
 
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/go-cleanhttp"
@@ -20,7 +21,7 @@ import (
 	"github.com/valyala/fastjson"
 )
 
-func Sign(ctx context.Context, pub *PublicKey, login string, params VaultParams, clt *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
+func Sign(ctx context.Context, pub *PublicKey, login, sshMount, sshRole string, clt *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
 	defer runtime.GC()
 	data := map[string]interface{}{
 		"valid_principals": login,
@@ -41,7 +42,7 @@ func Sign(ctx context.Context, pub *PublicKey, login string, params VaultParams,
 	if err != nil {
 		return nil, err
 	}
-	u.Path = fmt.Sprintf("/v1/%s/sign/%s", params.SSHMount, params.SSHRole)
+	u.Path = fmt.Sprintf("/v1/%s/sign/%s", sshMount, sshRole)
 	r := &http.Request{
 		Method:        "PUT",
 		URL:           u,

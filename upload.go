@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
+
 	"github.com/awnumar/memguard"
 	"go.uber.org/zap"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 
 	"github.com/ktr0731/go-fuzzyfinder"
 	vexec "github.com/stephane-martin/vault-exec/lib"
@@ -58,7 +57,7 @@ func sftpPutCommand() cli.Command {
 	}
 }
 
-func transform(a []string) []string {
+func filterOutEmptyStrings(a []string) []string {
 	var b []string
 	for _, s := range a {
 		s = strings.TrimSpace(s)
@@ -71,6 +70,12 @@ func transform(a []string) []string {
 
 type putFunc func(context.Context, []lib.Source, string, lib.SSHParams, *memguard.LockedBuffer, *memguard.LockedBuffer, *zap.SugaredLogger) error
 
+type entry struct {
+	path  string
+	rel   string
+	isdir bool
+}
+
 func wrapPut(f putFunc) cli.ActionFunc {
 	return func(c *cli.Context) (e error) {
 		defer func() {
@@ -81,54 +86,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		sigchan := make(chan os.Signal, 1)
-		signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			for range sigchan {
-				cancel()
-			}
-		}()
-
-		sourcesNames := transform(c.StringSlice("source"))
-		if len(sourcesNames) == 0 {
-			paths, err := lib.Walk()
-			if err != nil {
-				return err
-			}
-			idx, _ := fuzzyfinder.FindMulti(paths, func(i int) string {
-				if paths[i].IsDir {
-					return folderIcon + paths[i].RelName
-				}
-				return fileIcon + paths[i].RelName
-			})
-			for _, i := range idx {
-				sourcesNames = append(sourcesNames, paths[i].Path)
-			}
-			if len(sourcesNames) == 0 {
-				return errors.New("you must specify the sources")
-			}
-		}
-		sources := make([]lib.Source, 0, len(sourcesNames))
-		for _, name := range sourcesNames {
-			s, err := lib.MakeSource(name)
-			if err != nil {
-				return fmt.Errorf("error reading source %s: %s", name, err)
-			}
-			sources = append(sources, s)
-		}
-
-		dest := strings.TrimSpace(c.String("destination"))
-		if dest == "" {
-			dest = "."
-		}
-
-		vaultParams := lib.GetVaultParams(c)
-		if vaultParams.SSHMount == "" {
-			return errors.New("empty SSH mount point")
-		}
-		if vaultParams.SSHRole == "" {
-			return errors.New("empty SSH role")
-		}
+		cancelOnSignal(cancel)
 
 		params := lib.Params{
 			LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
@@ -148,41 +106,55 @@ func wrapPut(f putFunc) cli.ActionFunc {
 		if err != nil {
 			return err
 		}
-
-		// unset env VAULT_ADDR to prevent the vault client from seeing it
-		_ = os.Unsetenv("VAULT_ADDR")
-
-		client, err := vexec.Auth(
-			ctx,
-			vaultParams.AuthMethod,
-			vaultParams.Address,
-			vaultParams.AuthPath,
-			vaultParams.Token,
-			vaultParams.Username,
-			vaultParams.Password,
-			logger,
-		)
+		_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 		if err != nil {
-			return fmt.Errorf("auth failed: %s", err)
-		}
-		err = vexec.CheckHealth(ctx, client)
-		if err != nil {
-			return fmt.Errorf("Vault health check error: %s", err)
+			return err
 		}
 
-		privkey, err := lib.ReadPrivateKey(ctx, c.String("privkey"), c.String("vprivkey"), client, logger)
-		if err != nil {
-			return fmt.Errorf("failed to read private key: %s", err)
+		sourcesNames := filterOutEmptyStrings(c.StringSlice("source"))
+		if len(sourcesNames) == 0 {
+			var paths []entry
+			err := lib.WalkLocal(func(path, rel string, isdir bool) error {
+				if strings.HasPrefix(rel, ".") {
+					if isdir {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				paths = append(paths, entry{path: path, rel: rel, isdir: isdir})
+				return nil
+			}, logger)
+			if err != nil {
+				return err
+			}
+			idx, _ := fuzzyfinder.FindMulti(paths, func(i int) string {
+				if paths[i].isdir {
+					return folderIcon + paths[i].rel
+				}
+				return fileIcon + paths[i].rel
+			})
+			for _, i := range idx {
+				sourcesNames = append(sourcesNames, paths[i].path)
+			}
 		}
-		pubkey, err := lib.DerivePublicKey(privkey)
-		if err != nil {
-			return fmt.Errorf("error extracting public key: %s", err)
+		if len(sourcesNames) == 0 {
+			return errors.New("you must specify the sources")
 		}
 
-		signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client, logger)
-		if err != nil {
-			return fmt.Errorf("signing error: %s", err)
+		sources := make([]lib.Source, 0, len(sourcesNames))
+		for _, name := range sourcesNames {
+			s, err := lib.MakeSource(name)
+			if err != nil {
+				return fmt.Errorf("error reading source %s: %s", name, err)
+			}
+			sources = append(sources, s)
 		}
+
+		dest := strings.TrimSpace(c.String("destination"))
+		if dest == "" {
+			dest = "."
+		}
+
 		return f(ctx, sources, dest, sshParams, privkey, signed, logger)
 	}
 }

@@ -13,9 +13,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"strings"
 
-	vexec "github.com/stephane-martin/vault-exec/lib"
+	"github.com/peterh/liner"
 
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/vault/api"
@@ -193,13 +194,9 @@ func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 		return nil, fmt.Errorf("error parsing private key: %s", err)
 	}
 	if needPass {
-		phrase, err := vexec.Input("enter the passphrase for the private key: ", true)
+		pass, err := InputPassword("enter the passphrase for the private key: ")
 		if err != nil {
 			return nil, fmt.Errorf("failed to get passphrase: %s", err)
-		}
-		pass, err := memguard.NewImmutableFromBytes(phrase)
-		if err != nil {
-			return nil, err
 		}
 		decrypted, err := DecryptPrivateKey(privkey, pass)
 		if err != nil {
@@ -209,4 +206,21 @@ func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 		privkey = decrypted
 	}
 	return privkey, nil
+}
+
+func InputPassword(prompt string) (*memguard.LockedBuffer, error) {
+	defer runtime.GC()
+	line := liner.NewLiner()
+	line.SetCtrlCAborts(true)
+	pass, err := line.PasswordPrompt(prompt)
+	if err != nil {
+		pass = ""
+		return nil, err
+	}
+	b, err := memguard.NewImmutableFromBytes([]byte(pass))
+	pass = ""
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }

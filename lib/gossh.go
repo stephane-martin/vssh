@@ -23,7 +23,7 @@ func GoConnectAuth(ctx context.Context, sshParams SSHParams, auth []ssh.AuthMeth
 		Port: sshParams.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(sshParams.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(sshParams.Insecure, l)
 	if err != nil {
 		return err
 	}

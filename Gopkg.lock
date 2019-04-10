@@ -166,12 +166,28 @@
   version = "v0.1.2"
 
 [[projects]]
+  branch = "master"
+  digest = "1:be40f095cd741773905744f16c1f7a21fd9226ccd0529f019deb7da6d667f71c"
+  name = "github.com/logrusorgru/aurora"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a7b3b318ed4e1ae5b80602b08627267303c68572"
+
+[[projects]]
   digest = "1:0356f3312c9bd1cbeda81505b7fd437501d8e778ab66998ef69f00d7f9b3a0d7"
   name = "github.com/mattn/go-runewidth"
   packages = ["."]
   pruneopts = "UT"
   revision = "3ee7d812e62a0804a7d0a324e0249ca2db3476d3"
   version = "v0.0.4"
+
+[[projects]]
+  digest = "1:a310b34fdb4af778ac92cdc961165fa4d994ea9753c3da99bd9e5285b94cde6a"
+  name = "github.com/mattn/go-shellwords"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "a72fbe27a1b0ed0df2f02754945044ce1456608b"
+  version = "v1.0.5"
 
 [[projects]]
   digest = "1:5d231480e1c64a726869bc4142d270184c419749d34f167646baa21008eb0a79"
@@ -204,6 +220,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "288510b9734e30e7966ec2f22b87c5f8e67345e3"
+
+[[projects]]
+  branch = "master"
+  digest = "1:1cf5c80aa51a635a425906e723e07f386e8af3248d60fec94917ac266d8f37c6"
+  name = "github.com/peterh/liner"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "6f820f8f90ce9482ffbd40bb15f9ea9932f4942d"
 
 [[projects]]
   digest = "1:d886a3c32c8c1a770d07e36340f061d3afc948d065ffc3c9a19b01b34d4f0b65"
@@ -249,12 +273,12 @@
   revision = "21a848b7a7621d1ab718662f1b1b41ce7f7b097f"
 
 [[projects]]
-  digest = "1:28f641e2e8203d9b2e260129184057924578c23da212bf6f3be06a3022b5fa3f"
+  digest = "1:6d9ba924521b2f727ce8271c1569b043039bdd31ca8f6ff4b64711f3d72ff559"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "a308676068c891894645c8a167c806ce93f8067e"
-  version = "v0.5.6"
+  revision = "5bec9a2f1858578114b8b6e704e0877c905bc595"
+  version = "v0.6.1"
 
 [[projects]]
   digest = "1:ab93e2cd3289b7ba468d925f6f21ad06d8faf149e8bcc339fb73386a749ea999"
@@ -406,8 +430,10 @@
     "github.com/hashicorp/vault/helper/consts",
     "github.com/karrick/godirwalk",
     "github.com/ktr0731/go-fuzzyfinder",
+    "github.com/logrusorgru/aurora",
+    "github.com/mattn/go-shellwords",
     "github.com/mitchellh/go-homedir",
-    "github.com/pkg/sftp",
+    "github.com/peterh/liner",
     "github.com/stephane-martin/go-vis",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
@@ -416,7 +442,6 @@
     "go.uber.org/zap",
     "golang.org/x/crypto/ed25519",
     "golang.org/x/crypto/ssh",
-    "golang.org/x/crypto/ssh/knownhosts",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

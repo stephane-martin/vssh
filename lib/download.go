@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/pkg/sftp"
 	"io"
 	"io/ioutil"
 	"os"
@@ -24,9 +23,9 @@ import (
 // Callback is a function type that is used by ScpGet to return the remote SSH directories and files.
 type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
 
-func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) ([]Entry, error) {
+func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger, cb ListCallback) error {
 	if len(auth) == 0 {
-		return nil, errors.New("no auth method")
+		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
 		User: params.LoginName,
@@ -34,21 +33,14 @@ func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, 
 		Port: params.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	cfg.HostKey = hkcb
-
-	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
+	client, err := gssh.SFTP(cfg)
 	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = conn.Close() }()
-
-	client, err := sftp.NewClient(conn)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
 	stopping := make(chan struct{})
@@ -61,20 +53,24 @@ func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, 
 		_ = client.Close()
 	}()
 
-	var list []Entry
+	wd, err := client.Getwd()
+	if err != nil {
+		return err
+	}
 	walker := client.Walk(".")
 	for walker.Step() {
 		path := walker.Path()
 		infos := walker.Stat()
 		if walker.Err() == nil && path != "." && (infos.IsDir() || infos.Mode().IsRegular()) {
-			list = append(list, Entry{
-				Path: path,	// TODO
-				RelName: path,
-				IsDir: infos.IsDir(),
-			})
+			err := cb(filepath.Join(wd, path), path, infos.IsDir())
+			if err == filepath.SkipDir {
+				walker.SkipDir()
+			} else if err != nil {
+				return err
+			}
 		}
 	}
-	return list, nil
+	return nil
 }
 
 func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
@@ -90,19 +86,12 @@ func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ss
 		Port: params.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-
-	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-
-	client, err := sftp.NewClient(conn)
+	client, err := gssh.SFTP(cfg)
 	if err != nil {
 		return err
 	}
@@ -176,7 +165,6 @@ func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ss
 		}
 	}
 
-
 	return nil
 }
 
@@ -193,15 +181,14 @@ func ScpGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh
 		Port: params.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client := gssh.NewClient(cfg)
 
 	for _, source := range srcs {
-		err := receive(ctx, client, source, cb, l)
+		err := receive(ctx, cfg, source, cb, l)
 		if err != nil {
 			return err
 		}
@@ -209,56 +196,49 @@ func ScpGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh
 	return nil
 }
 
-func ScpGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+func makeAuthCertificate(privkey, cert *memguard.LockedBuffer) (ssh.AuthMethod, error) {
 	c, err := gssh.ParseCertificate(cert.Buffer())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s, err := ssh.ParsePrivateKey(privkey.Buffer())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	signer, err := ssh.NewCertSigner(c, s)
 	if err != nil {
+		return nil, err
+	}
+	return ssh.PublicKeys(signer), nil
+}
+
+func ScpGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+	a, err := makeAuthCertificate(privkey, cert)
+	if err != nil {
 		return err
 	}
-	return ScpGetAuth(ctx, srcs, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, cb, l)
+	return ScpGetAuth(ctx, srcs, params, []ssh.AuthMethod{a}, cb, l)
 }
 
 func SFTPGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
-	c, err := gssh.ParseCertificate(cert.Buffer())
+	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	s, err := ssh.ParsePrivateKey(privkey.Buffer())
-	if err != nil {
-		return err
-	}
-	signer, err := ssh.NewCertSigner(c, s)
-	if err != nil {
-		return err
-	}
-	return SFTPGetAuth(ctx, srcs, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, cb, l)
+	return SFTPGetAuth(ctx, srcs, params, []ssh.AuthMethod{a}, cb, l)
 }
 
-func SFTPList(ctx context.Context, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) ([]Entry, error) {
-	c, err := gssh.ParseCertificate(cert.Buffer())
-	if err != nil {
-		return nil, err
-	}
-	s, err := ssh.ParsePrivateKey(privkey.Buffer())
-	if err != nil {
-		return nil, err
-	}
-	signer, err := ssh.NewCertSigner(c, s)
-	if err != nil {
-		return nil, err
-	}
-	return SFTPListAuth(ctx, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
+type ListCallback func(path, relName string, isDir bool) error
 
+func SFTPList(ctx context.Context, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger, cb ListCallback) error {
+	a, err := makeAuthCertificate(privkey, cert)
+	if err != nil {
+		return err
+	}
+	return SFTPListAuth(ctx, params, []ssh.AuthMethod{a}, l, cb)
 }
 
-func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *zap.SugaredLogger) error {
+func receive(ctx context.Context, cfg gssh.Config, src string, cb Callback, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var p string
@@ -270,21 +250,21 @@ func receive(ctx context.Context, clt *gssh.Client, src string, cb Callback, l *
 	opts := "-q -f -r -p"
 	command := fmt.Sprintf("scp %s %s", opts, p)
 	l.Debugw("remote command", "cmd", command)
-	stdin, stdout, stderr, err := clt.Start(lctx, command)
+	clt, err := gssh.StartCommand(lctx, cfg, command)
 	if err != nil {
 		return err
 	}
 	go func() {
-		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
+		_, _ = io.Copy(os.Stderr, bufio.NewReader(clt.Stderr))
 	}()
-	err = receiveOne(stdin, bufio.NewReader(stdout), src, "", cb, l)
+	err = receiveOne(clt.Stdin, bufio.NewReader(clt.Stdout), src, "", cb, l)
 	if err != nil {
-		_ = stdin.Close()
+		_ = clt.Stdin.Close()
 		cancel()
 		_ = clt.Wait()
 		return err
 	}
-	_ = stdin.Close()
+	_ = clt.Stdin.Close()
 	return clt.Wait()
 }
 

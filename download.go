@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/awnumar/memguard"
 	"io"
 	"os"
 	"os/signal"
@@ -12,6 +11,9 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/awnumar/memguard"
+	"github.com/ktr0731/go-fuzzyfinder"
 
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
@@ -38,7 +40,7 @@ func scpGetCommand() cli.Command {
 				Usage: "preserves modification times, access times, and modes from the original file",
 			},
 		},
-		Action: wrapGet(lib.ScpGet),
+		Action: wrapGet(false),
 	}
 }
 
@@ -61,13 +63,13 @@ func sftpGetCommand() cli.Command {
 				Usage: "preserves modification times, access times, and modes from the original file",
 			},
 		},
-		Action: wrapGet(lib.SFTPGet),
+		Action: wrapGet(true),
 	}
 }
 
 type getFunc func(context.Context, []string, lib.SSHParams, *memguard.LockedBuffer, *memguard.LockedBuffer, lib.Callback, *zap.SugaredLogger) error
 
-func wrapGet(f getFunc) cli.ActionFunc {
+func wrapGet(sftp bool) cli.ActionFunc {
 	return func(c *cli.Context) (e error) {
 		defer func() {
 			if e != nil {
@@ -85,9 +87,8 @@ func wrapGet(f getFunc) cli.ActionFunc {
 			}
 		}()
 
-		sources := transform(c.StringSlice("target"))
-		if len(sources) == 0 {
-			// TODO: fuzzy finder
+		sources := filterOutEmptyStrings(c.StringSlice("target"))
+		if len(sources) == 0 && !sftp {
 			return errors.New("you must specify the targets")
 		}
 
@@ -106,13 +107,6 @@ func wrapGet(f getFunc) cli.ActionFunc {
 		}
 		if len(sources) > 1 && !destExists {
 			return fmt.Errorf("no such file or directory: %s", dest)
-		}
-		vaultParams := lib.GetVaultParams(c)
-		if vaultParams.SSHMount == "" {
-			return errors.New("empty SSH mount point")
-		}
-		if vaultParams.SSHRole == "" {
-			return errors.New("empty SSH role")
 		}
 
 		params := lib.Params{
@@ -133,41 +127,52 @@ func wrapGet(f getFunc) cli.ActionFunc {
 		if err != nil {
 			return err
 		}
-
-		// unset env VAULT_ADDR to prevent the vault client from seeing it
-		_ = os.Unsetenv("VAULT_ADDR")
-
-		client, err := vexec.Auth(
-			ctx,
-			vaultParams.AuthMethod,
-			vaultParams.Address,
-			vaultParams.AuthPath,
-			vaultParams.Token,
-			vaultParams.Username,
-			vaultParams.Password,
-			logger,
-		)
+		_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 		if err != nil {
-			return fmt.Errorf("auth failed: %s", err)
-		}
-		err = vexec.CheckHealth(ctx, client)
-		if err != nil {
-			return fmt.Errorf("Vault health check error: %s", err)
+			return err
 		}
 
-		privkey, err := lib.ReadPrivateKey(ctx, c.String("privkey"), c.String("vprivkey"), client, logger)
-		if err != nil {
-			return fmt.Errorf("failed to read private key: %s", err)
-		}
-		pubkey, err := lib.DerivePublicKey(privkey)
-		if err != nil {
-			return fmt.Errorf("error extracting public key: %s", err)
+		if len(sources) == 0 {
+			var paths []entry
+			err := lib.SFTPList(ctx, sshParams, privkey, signed, logger, func(path, rel string, isdir bool) error {
+				if strings.HasPrefix(rel, ".") {
+					if isdir {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				paths = append(paths, entry{path: path, rel: rel, isdir: isdir})
+				return nil
+			})
+
+			if err != nil {
+				return err
+			}
+			idx, _ := fuzzyfinder.FindMulti(paths, func(i int) string {
+				if paths[i].isdir {
+					return folderIcon + paths[i].rel
+				}
+				return fileIcon + paths[i].rel
+			})
+			for _, i := range idx {
+				sources = append(sources, paths[i].path)
+			}
+			if len(sources) == 0 {
+				return errors.New("you must specify the targets")
+			}
+			_, privkey, signed, _, err = getCredentials(ctx, c, sshParams.LoginName, logger)
+			if err != nil {
+				return err
+			}
 		}
 
-		signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client, logger)
-		if err != nil {
-			return fmt.Errorf("signing error: %s", err)
+		var f getFunc
+		if sftp {
+			f = lib.SFTPGet
+		} else {
+			f = lib.ScpGet
 		}
+
 		return f(
 			ctx,
 			sources,

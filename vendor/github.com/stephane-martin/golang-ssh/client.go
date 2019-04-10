@@ -1,13 +1,8 @@
-// Package ssh is a helper for working with ssh in go.  The client implementation
-// is a modified version of `docker/machine/libmachine/ssh/client.go` and only
-// uses golang's native ssh client. It has also been improved to resize the tty
-// accordingly. The key functions are meant to be used by either client or server
-// and will generate/store keys if not found.
+// Package ssh is a helper for working with ssh in go.
 package ssh
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,14 +12,18 @@ import (
 	"time"
 
 	"github.com/moby/moby/pkg/term"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 type Client struct {
-	Config
-	openSession *ssh.Session
-	openClient  *ssh.Client
+	Cfg     Config
+	Session *ssh.Session
+	Conn    *ssh.Client
+	Stdin   io.WriteCloser
+	Stdout  io.Reader
+	Stderr  io.Reader
 	sync.Mutex
 	stopping chan struct{}
 }
@@ -36,7 +35,6 @@ type Config struct {
 	Port          int                 // port to connect to, 22 by default
 	Auth          []ssh.AuthMethod    // authentication methods to use
 	Timeout       time.Duration       // connect timeout, 30s by default
-	DialRetry     int                 // number of dial retries, 0 (no retries) by default
 	HostKey       ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
 }
 
@@ -47,87 +45,90 @@ func (cfg Config) Version() string {
 	return "SSH-2.0-Go"
 }
 
-func (cfg Config) port() int {
+func (cfg Config) GetPort() int {
 	if cfg.Port != 0 {
 		return cfg.Port
 	}
 	return 22
 }
 
-func (cfg Config) timeout() time.Duration {
+func (cfg Config) GetTimeout() time.Duration {
 	if cfg.Timeout != 0 {
 		return cfg.Timeout
 	}
 	return 15 * time.Second
 }
 
-func (cfg Config) hostKey() ssh.HostKeyCallback {
+func (cfg Config) GetHostKeyCallback() ssh.HostKeyCallback {
 	if cfg.HostKey != nil {
 		return cfg.HostKey
 	}
 	return ssh.InsecureIgnoreHostKey()
 }
 
-func (cfg Config) Addr() string {
-	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.port()))
+func (cfg Config) GetAddr() string {
+	return net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.GetPort()))
 }
 
-func (cfg Config) Native() *ssh.ClientConfig {
+func (cfg Config) ToNative() *ssh.ClientConfig {
 	return &ssh.ClientConfig{
 		User:            cfg.User,
 		Auth:            cfg.Auth,
 		ClientVersion:   cfg.Version(),
-		HostKeyCallback: cfg.hostKey(),
-		Timeout:         cfg.timeout(),
+		HostKeyCallback: cfg.GetHostKeyCallback(),
+		Timeout:         cfg.GetTimeout(),
 	}
 }
 
-// NewClient creates a new Client using the golang ssh library.
-func NewClient(cfg Config) *Client {
-	return &Client{
-		Config: cfg,
-	}
-}
-
-// Start starts the specified command without waiting for it to finish. You
-// have to call the Wait function for that.
-func (client *Client) Start(ctx context.Context, command string) (io.WriteCloser, io.Reader, io.Reader, error) {
-	client.Lock()
-	defer client.Unlock()
-	if client.openSession != nil {
-		return nil, nil, nil, errors.New("client already started")
-	}
-	stopping := make(chan struct{})
-	client.stopping = stopping
-	session, conn, err := newSession(client.Config)
+func SFTP(cfg Config) (*sftp.Client, error) {
+	conn, err := dial(cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
+	}
+	return sftp.NewClient(conn)
+}
+
+// StartCommand starts the specified command without waiting for it to finish. You
+// have to call the Wait function for that.
+func StartCommand(ctx context.Context, cfg Config, command string) (*Client, error) {
+	client := &Client{Cfg: cfg}
+	conn, err := dial(client.Cfg)
+	if err != nil {
+		return nil, err
+	}
+	session, err := conn.NewSession()
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
 	}
 
 	stdin, err := session.StdinPipe()
 	if err != nil {
 		_ = session.Close()
 		_ = conn.Close()
-		return nil, nil, nil, err
+		return nil, err
 	}
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		_ = session.Close()
 		_ = conn.Close()
-		return nil, nil, nil, err
+		return nil, err
 	}
 	stderr, err := session.StderrPipe()
 	if err != nil {
 		_ = session.Close()
 		_ = conn.Close()
-		return nil, nil, nil, err
+		return nil, err
 	}
 	err = session.Start(command)
 	if err != nil {
 		_ = session.Close()
 		_ = conn.Close()
-		return nil, nil, nil, err
+		return nil, err
 	}
+
+	stopping := make(chan struct{})
+	client.stopping = stopping
 
 	go func() {
 		select {
@@ -137,16 +138,19 @@ func (client *Client) Start(ctx context.Context, command string) (io.WriteCloser
 		}
 	}()
 
-	client.openSession = session
-	client.openClient = conn
-	return stdin, stdout, stderr, nil
+	client.Session = session
+	client.Conn = conn
+	client.Stdout = stdout
+	client.Stderr = stderr
+	client.Stdin = stdin
+	return client, nil
 }
 
 // Wait waits for the command started by the Start function to exit. The
 // returned error follows the same logic as in the exec.Cmd.Wait function.
 func (client *Client) Wait() (err error) {
 	client.Lock()
-	sess := client.openSession
+	sess := client.Session
 	if sess != nil {
 		client.Unlock()
 		err = sess.Wait()
@@ -155,50 +159,42 @@ func (client *Client) Wait() (err error) {
 			close(client.stopping)
 			client.stopping = nil
 		}
-		if client.openSession != nil {
-			_ = client.openSession.Close()
-			client.openSession = nil
+		if client.Session != nil {
+			_ = client.Session.Close()
+			client.Session = nil
 		}
-		if client.openClient != nil {
-			_ = client.openClient.Close()
-			client.openClient = nil
+		if client.Conn != nil {
+			_ = client.Conn.Close()
+			client.Conn = nil
 		}
 		client.Unlock()
 		return wrapError(err)
 	}
-	if client.openClient != nil {
-		_ = client.openClient.Close()
-		client.openClient = nil
+	if client.Conn != nil {
+		_ = client.Conn.Close()
+		client.Conn = nil
 	}
 	client.Unlock()
 	return nil
 }
 
-func newSession(config Config) (*ssh.Session, *ssh.Client, error) {
-	var conn *ssh.Client
-	var err error
-	for i := config.DialRetry + 1; i > 0; i-- {
-		conn, err = ssh.Dial("tcp", config.Addr(), config.Native())
-		if err == nil {
-			break
-		}
-		time.Sleep(3 * time.Second) // backoff?
-	}
+func dial(config Config) (*ssh.Client, error) {
+	conn, err := ssh.Dial("tcp", config.GetAddr(), config.ToNative())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	session, err := conn.NewSession()
-	if err != nil {
-		_ = conn.Close()
-		return nil, nil, err
-	}
-	return session, conn, nil
+	return conn, err
 }
 
 // Output returns the output of the command run on the remote host.
 func Output(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	session, conn, err := newSession(config)
+	conn, err := dial(config)
 	if err != nil {
+		return err
+	}
+	session, err := conn.NewSession()
+	if err != nil {
+		_ = conn.Close()
 		return err
 	}
 	defer func() {
@@ -222,10 +218,16 @@ func Output(ctx context.Context, config Config, command string, stdout, stderr i
 
 // Output returns the output of the command run on the remote host as well as a pty.
 func OutputWithPty(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	session, conn, err := newSession(config)
+	conn, err := dial(config)
 	if err != nil {
 		return err
 	}
+	session, err := conn.NewSession()
+	if err != nil {
+		_ = conn.Close()
+		return err
+	}
+
 	defer func() {
 		_ = session.Close()
 		_ = conn.Close()
@@ -271,8 +273,13 @@ func Shell(ctx context.Context, config Config, stdin io.Reader, stdout, stderr i
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	session, conn, err := newSession(config)
+	conn, err := dial(config)
 	if err != nil {
+		return err
+	}
+	session, err := conn.NewSession()
+	if err != nil {
+		_ = conn.Close()
 		return err
 	}
 	defer func() {

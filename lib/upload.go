@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/awnumar/memguard"
-	"github.com/pkg/sftp"
 	"github.com/stephane-martin/go-vis"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
@@ -95,24 +94,19 @@ func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, param
 	if remotePath == "" {
 		remotePath = "."
 	}
+
 	cfg := gssh.Config{
 		User: params.LoginName,
 		Host: params.Host,
 		Port: params.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-
-	conn, err := ssh.Dial("tcp", cfg.Addr(), cfg.Native())
-	if err != nil {
-		return err
-	}
-	defer func() { _ = conn.Close() }()
-	client, err := sftp.NewClient(conn)
+	client, err := gssh.SFTP(cfg)
 	if err != nil {
 		return err
 	}
@@ -261,13 +255,11 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params
 		Port: params.Port,
 		Auth: auth,
 	}
-	hkcb, err := MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-
-	client := gssh.NewClient(cfg)
 
 	opts := "-q -t"
 	if hasDir(sources) {
@@ -284,23 +276,23 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params
 	}
 	command := fmt.Sprintf("scp %s %s", opts, p)
 	l.Debugw("remote command", "cmd", command)
-	stdin, stdout, stderr, err := client.Start(ctx, command)
+	client, err := gssh.StartCommand(ctx, cfg, command)
 	if err != nil {
 		return err
 	}
 	go func() {
-		_, _ = io.Copy(os.Stderr, bufio.NewReader(stderr))
+		_, _ = io.Copy(os.Stderr, bufio.NewReader(client.Stderr))
 	}()
-	bufStdout := bufio.NewReader(stdout)
+	bufStdout := bufio.NewReader(client.Stdout)
 
 	for _, source := range sources {
-		err := sendOne(source, stdin, bufStdout, l)
+		err := sendOne(source, client.Stdin, bufStdout, l)
 		if err != nil {
-			_ = stdin.Close()
+			_ = client.Stdin.Close()
 			return err
 		}
 	}
-	_ = stdin.Close()
+	_ = client.Stdin.Close()
 	l.Debugw("waiting for remote process")
 	return client.Wait()
 }
@@ -313,19 +305,11 @@ func ScpPut(ctx context.Context, sources []Source, remotePath string, params SSH
 			_ = s.Close()
 		}
 	}()
-	c, err := gssh.ParseCertificate(cert.Buffer())
+	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	s, err := ssh.ParsePrivateKey(privkey.Buffer())
-	if err != nil {
-		return err
-	}
-	signer, err := ssh.NewCertSigner(c, s)
-	if err != nil {
-		return err
-	}
-	return ScpPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
+	return ScpPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{a}, l)
 }
 
 func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
@@ -336,19 +320,11 @@ func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SS
 			_ = s.Close()
 		}
 	}()
-	c, err := gssh.ParseCertificate(cert.Buffer())
+	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	s, err := ssh.ParsePrivateKey(privkey.Buffer())
-	if err != nil {
-		return err
-	}
-	signer, err := ssh.NewCertSigner(c, s)
-	if err != nil {
-		return err
-	}
-	return SFTPPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{ssh.PublicKeys(signer)}, l)
+	return SFTPPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{a}, l)
 }
 
 func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.SugaredLogger) error {

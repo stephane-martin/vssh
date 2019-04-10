@@ -4,13 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"syscall"
+
+	"github.com/logrusorgru/aurora"
+	"github.com/mattn/go-shellwords"
+	"github.com/peterh/liner"
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
 func sftpCommand() cli.Command {
@@ -47,11 +53,73 @@ func sftpCommand() cli.Command {
 				EnvVar: "SSH_INSECURE",
 			},
 		},
+		Action: func(c *cli.Context) error {
+			commands := []string{"ls", "lls", "get", "put", "cd", "lcd", "lmkdir", "mkdir", "pwd", "lpwd", "rename", "rm", "rmdir", "exit", "help"}
+			line := liner.NewLiner()
+			defer line.Close()
+			line.SetCompleter(func(line string) []string {
+				args, err := shellwords.Parse(line)
+				if err != nil {
+					return nil
+				}
+				if len(args) == 0 {
+					return commands
+				}
+				var c []string
+				if len(args) == 1 {
+					for _, n := range commands {
+						if strings.HasPrefix(n, strings.ToLower(line)) {
+							c = append(c, n)
+						}
+					}
+				}
+				return c
+			})
+			line.SetCtrlCAborts(true)
+			line.SetTabCompletionStyle(liner.TabCircular)
+		L:
+			for {
+				l, err := line.Prompt("> ")
+				if err == nil {
+					p := shellwords.NewParser()
+					args, err := p.Parse(l)
+					if err != nil {
+						fmt.Fprintln(os.Stderr, "Error reading line: ", err)
+					} else if p.Position != -1 {
+						fmt.Fprintln(os.Stderr, "Error reading line")
+					} else {
+						for _, arg := range args {
+							fmt.Println(arg)
+						}
+						switch args[0] {
+						case "exit":
+							break L
+						}
+					}
+					//line.AppendHistory(name)
+				} else if err == liner.ErrPromptAborted || err == io.EOF {
+					break L
+				} else {
+					fmt.Fprintln(os.Stderr, "Error reading line: ", err)
+				}
+			}
+			return nil
+		},
 		Subcommands: []cli.Command{
 			sftpPutCommand(),
 			sftpGetCommand(),
 			{
 				Name: "list",
+				Flags: []cli.Flag{
+					cli.BoolFlag{
+						Name:  "color",
+						Usage: "colored output",
+					},
+					cli.BoolFlag{
+						Name:  "hidden",
+						Usage: "show hidden files and directories",
+					},
+				},
 				Action: func(c *cli.Context) (e error) {
 					defer func() {
 						if e != nil {
@@ -69,7 +137,7 @@ func sftpCommand() cli.Command {
 						}
 					}()
 
-					vaultParams := lib.GetVaultParams(c)
+					vaultParams := getVaultParams(c)
 					if vaultParams.SSHMount == "" {
 						return errors.New("empty SSH mount point")
 					}
@@ -97,49 +165,35 @@ func sftpCommand() cli.Command {
 						return err
 					}
 
-					// unset env VAULT_ADDR to prevent the vault client from seeing it
-					_ = os.Unsetenv("VAULT_ADDR")
-
-					client, err := vexec.Auth(
-						ctx,
-						vaultParams.AuthMethod,
-						vaultParams.Address,
-						vaultParams.AuthPath,
-						vaultParams.Token,
-						vaultParams.Username,
-						vaultParams.Password,
-						logger,
-					)
-					if err != nil {
-						return fmt.Errorf("auth failed: %s", err)
-					}
-					err = vexec.CheckHealth(ctx, client)
-					if err != nil {
-						return fmt.Errorf("Vault health check error: %s", err)
-					}
-
-					privkey, err := lib.ReadPrivateKey(ctx, c.String("privkey"), c.String("vprivkey"), client, logger)
-					if err != nil {
-						return fmt.Errorf("failed to read private key: %s", err)
-					}
-					pubkey, err := lib.DerivePublicKey(privkey)
-					if err != nil {
-						return fmt.Errorf("error extracting public key: %s", err)
-					}
-
-					signed, err := lib.Sign(ctx, pubkey, sshParams.LoginName, vaultParams, client, logger)
-					if err != nil {
-						return fmt.Errorf("signing error: %s", err)
-					}
-
-					list, err := lib.SFTPList(ctx, sshParams, privkey, signed, logger)
+					_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 					if err != nil {
 						return err
 					}
-					for _, f := range list {
-						fmt.Println(f.Path)
-					}
-					return nil
+
+					hidden := c.Bool("hidden")
+					aur := aurora.NewAurora(c.Bool("color"))
+					return lib.SFTPList(ctx, sshParams, privkey, signed, logger, func(path, relname string, isdir bool) error {
+						if isdir {
+							if strings.HasPrefix(filepath.Base(path), ".") {
+								if hidden {
+									fmt.Println(aur.Blue(relname + "/"))
+								} else {
+									return filepath.SkipDir
+								}
+							} else {
+								fmt.Println(aur.Bold(aur.Blue(relname + "/")))
+							}
+						} else {
+							if strings.HasPrefix(filepath.Base(path), ".") {
+								if hidden {
+									fmt.Println(aur.Gray(relname))
+								}
+							} else {
+								fmt.Println(relname)
+							}
+						}
+						return nil
+					})
 				},
 			},
 		},

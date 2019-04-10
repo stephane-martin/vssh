@@ -1,32 +1,20 @@
 package lib
 
 import (
-	"github.com/karrick/godirwalk"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"github.com/karrick/godirwalk"
+	"go.uber.org/zap"
 )
 
-type Entry struct {
-	Path string
-	RelName string
-	IsDir bool
-}
-
-func Walk() ([]Entry, error) {
+func WalkLocal(cb ListCallback, l *zap.SugaredLogger) error {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	paths := make([]Entry, 0)
-	err = godirwalk.Walk(cwd, &godirwalk.Options{
+	return godirwalk.Walk(cwd, &godirwalk.Options{
 		Callback: func(osPathname string, de *godirwalk.Dirent) error {
-			if de.IsDir() && strings.HasPrefix(de.Name(), ".") {
-				return filepath.SkipDir
-			}
-			if !de.IsDir() && strings.HasPrefix(de.Name(), ".") {
-				return nil
-			}
 			relName, err := filepath.Rel(cwd, osPathname)
 			if err != nil {
 				return err
@@ -34,17 +22,14 @@ func Walk() ([]Entry, error) {
 			if relName == "." {
 				return nil
 			}
-			paths = append(paths, Entry{
-				Path: osPathname,
-				RelName: relName,
-				IsDir: de.IsDir(),
-			})
-			//fmt.Printf("%s %s\n", de.ModeType(), osPathname)
+			if de.IsDir() || de.IsRegular() {
+				return cb(osPathname, relName, de.IsDir())
+			}
 			return nil
 		},
+		ErrorCallback: func(path string, e error) godirwalk.ErrorAction {
+			l.Debugw("error walking current directory", "path", path, "error", e)
+			return godirwalk.SkipNode
+		},
 	})
-	if err != nil {
-		return nil, err
-	}
-	return paths, nil
 }
