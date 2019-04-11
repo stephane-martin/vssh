@@ -21,6 +21,54 @@
   version = "v1.4.0"
 
 [[projects]]
+  digest = "1:e2921241c77283579f383d04139a68aaca100668a26de5e1bc56d29d896ee304"
+  name = "github.com/ahmetb/go-linq"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "7e71c124c1f903df09ca08678f145f68b45d125e"
+  version = "v3.0.0"
+
+[[projects]]
+  digest = "1:3e98d7591efd49c324016c20fa4409e7498f791bc764a7c016258e34584d9514"
+  name = "github.com/alecthomas/chroma"
+  packages = [
+    ".",
+    "formatters",
+    "formatters/html",
+    "lexers",
+    "lexers/a",
+    "lexers/b",
+    "lexers/c",
+    "lexers/circular",
+    "lexers/d",
+    "lexers/e",
+    "lexers/f",
+    "lexers/g",
+    "lexers/h",
+    "lexers/i",
+    "lexers/internal",
+    "lexers/j",
+    "lexers/k",
+    "lexers/l",
+    "lexers/m",
+    "lexers/n",
+    "lexers/o",
+    "lexers/p",
+    "lexers/q",
+    "lexers/r",
+    "lexers/s",
+    "lexers/t",
+    "lexers/v",
+    "lexers/w",
+    "lexers/x",
+    "lexers/y",
+    "styles",
+  ]
+  pruneopts = "UT"
+  revision = "38460d1881ab5310948072eea583e52e181c196a"
+  version = "v0.6.3"
+
+[[projects]]
   digest = "1:47fd1237abeac1246a1e690f3c6c8e8c5b963b5bf946be4f9c8210453a502a11"
   name = "github.com/awnumar/memguard"
   packages = [
@@ -32,12 +80,50 @@
   version = "v0.15.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:710109527a119c813d4fac773712dd92f449ed7c2f7b81f49822f94d290c8f72"
+  name = "github.com/danwakefield/fnmatch"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "cbb64ac3d964b81592e64f957ad53df015803288"
+
+[[projects]]
+  digest = "1:72dc2b6056e7097f829260e4a2ff08d32fec6017df1982a66e110ab4128486f8"
+  name = "github.com/dlclark/regexp2"
+  packages = [
+    ".",
+    "syntax",
+  ]
+  pruneopts = "UT"
+  revision = "487489b64fb796de2e55f4e8a4ad1e145f80e957"
+  version = "v1.1.6"
+
+[[projects]]
   digest = "1:94d96b283e7cee29db1b0a36135e6ad9e8584f8f03155ddaf418984ec4de707a"
   name = "github.com/docker/docker"
   packages = ["pkg/term/windows"]
   pruneopts = "UT"
   revision = "092cba3727bb9b4a2f0e922cd6c0f93ea270e363"
   version = "v1.13.1"
+
+[[projects]]
+  digest = "1:0e16b03c72bd42739ca68d055c10369e60d17838428f512f3b29ae115ba788e0"
+  name = "github.com/gdamore/encoding"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "6289cdc94c00ac4aa177771c5fce7af2f96b626d"
+  version = "v1.0.0"
+
+[[projects]]
+  digest = "1:937011a37a09b93be68052dfb3195fcfbff33b9472b37401b54027e9954906fb"
+  name = "github.com/gdamore/tcell"
+  packages = [
+    ".",
+    "terminfo",
+  ]
+  pruneopts = "UT"
+  revision = "aaadc574a6ed8dc3abe56036ca130dcee1ee6b6e"
+  version = "v1.1.1"
 
 [[projects]]
   digest = "1:e4f5819333ac698d294fe04dbf640f84719658d5c7ce195b10060cc37292ce79"
@@ -174,6 +260,14 @@
   revision = "a7b3b318ed4e1ae5b80602b08627267303c68572"
 
 [[projects]]
+  digest = "1:39de67207027b7374272d5ec9b1bf85457714150ba1263e8d236316629dad570"
+  name = "github.com/lucasb-eyer/go-colorful"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "30298f24079860c4dee452fdef6519b362a4a026"
+  version = "v1.0.2"
+
+[[projects]]
   digest = "1:0356f3312c9bd1cbeda81505b7fd437501d8e778ab66998ef69f00d7f9b3a0d7"
   name = "github.com/mattn/go-runewidth"
   packages = ["."]
@@ -255,6 +349,22 @@
   pruneopts = "UT"
   revision = "a713b07e6d90e1831d7fefcb69f1310edb3783ae"
   version = "v1.10.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:65d59a5b6a44b52bc2449479cc40de6da03398ef9c6323ea868c9ac752b9d441"
+  name = "github.com/rivo/tview"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "90b4da1bd64ceee13d2e7d782b315b819190f7bf"
+
+[[projects]]
+  branch = "master"
+  digest = "1:ab2d8dae71aefc7057f8da6a765968d46cb4190aee8ba247c46afc129d45a3bf"
+  name = "github.com/rivo/uniseg"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f699dde9c340bcc39b69a4c67369832af73ec72e"
 
 [[projects]]
   digest = "1:6baa565fe16f8657cf93469b2b8a6c61a277827734400d27e44d589547297279"
@@ -390,11 +500,13 @@
   revision = "f49334f85ddcf0f08d7fb6dd7363e9e6d6b777eb"
 
 [[projects]]
-  digest = "1:a2ab62866c75542dd18d2b069fec854577a20211d7c0ea6ae746072a1dccdd18"
+  digest = "1:23c42b366ef158741f7229785fc19761de6372b89ab515cbe43e781056044a4c"
   name = "golang.org/x/text"
   packages = [
     "collate",
     "collate/build",
+    "encoding",
+    "encoding/internal/identifier",
     "internal/colltab",
     "internal/gen",
     "internal/tag",
@@ -424,7 +536,12 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/ahmetb/go-linq",
+    "github.com/alecthomas/chroma/formatters",
+    "github.com/alecthomas/chroma/lexers",
+    "github.com/alecthomas/chroma/styles",
     "github.com/awnumar/memguard",
+    "github.com/gdamore/tcell",
     "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
     "github.com/hashicorp/vault/helper/consts",
@@ -434,6 +551,8 @@
     "github.com/mattn/go-shellwords",
     "github.com/mitchellh/go-homedir",
     "github.com/peterh/liner",
+    "github.com/pkg/sftp",
+    "github.com/rivo/tview",
     "github.com/stephane-martin/go-vis",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
@@ -442,6 +561,7 @@
     "go.uber.org/zap",
     "golang.org/x/crypto/ed25519",
     "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/terminal",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

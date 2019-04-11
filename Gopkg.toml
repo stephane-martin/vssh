@@ -46,6 +46,18 @@
   name = "github.com/logrusorgru/aurora"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/ahmetb/go-linq"
+  version = "3.0.0"
+
+[[constraint]]
+  name = "github.com/rivo/tview"
+  branch = "master"
+
+[[constraint]]
+  name = "github.com/alecthomas/chroma"
+  version = "0.6.3"
+
 [prune]
   go-tests = true
   unused-packages = true

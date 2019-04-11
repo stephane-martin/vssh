@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/awnumar/memguard"
+	"github.com/pkg/sftp"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
@@ -22,6 +23,30 @@ import (
 
 // Callback is a function type that is used by ScpGet to return the remote SSH directories and files.
 type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
+
+func SFTPClient(params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) (*sftp.Client, error) {
+	a, err := makeAuthCertificate(privkey, cert)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := gssh.Config{
+		User: params.LoginName,
+		Host: params.Host,
+		Port: params.Port,
+		Auth: []ssh.AuthMethod{a},
+	}
+	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	if err != nil {
+		return nil, err
+	}
+	cfg.HostKey = hkcb
+	client, err := gssh.SFTP(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return client, err
+}
 
 func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger, cb ListCallback) error {
 	if len(auth) == 0 {

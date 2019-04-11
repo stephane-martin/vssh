@@ -11,8 +11,10 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/ahmetb/go-linq"
 	"github.com/logrusorgru/aurora"
 	"github.com/mattn/go-shellwords"
+	"github.com/mitchellh/go-homedir"
 	"github.com/peterh/liner"
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
@@ -53,10 +55,79 @@ func sftpCommand() cli.Command {
 				EnvVar: "SSH_INSECURE",
 			},
 		},
-		Action: func(c *cli.Context) error {
-			commands := []string{"ls", "lls", "get", "put", "cd", "lcd", "lmkdir", "mkdir", "pwd", "lpwd", "rename", "rm", "rmdir", "exit", "help"}
+		Action: func(c *cli.Context) (e error) {
+			defer func() {
+				if e != nil {
+					e = cli.NewExitError(e.Error(), 1)
+				}
+			}()
+
+			vaultParams := getVaultParams(c)
+			if vaultParams.SSHMount == "" {
+				return errors.New("empty SSH mount point")
+			}
+			if vaultParams.SSHRole == "" {
+				return errors.New("empty SSH role")
+			}
+
+			params := lib.Params{
+				LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+			}
+
+			logger, err := vexec.Logger(params.LogLevel)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = logger.Sync() }()
+
+			args := c.Args()
+			if len(args) == 0 {
+				return errors.New("no host provided")
+			}
+
+			sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
+			if err != nil {
+				return err
+			}
+
+			_, privkey, signed, _, err := getCredentials(context.Background(), c, sshParams.LoginName, logger)
+			if err != nil {
+				return err
+			}
+			client, err := lib.SFTPClient(sshParams, privkey, signed, logger)
+			if err != nil {
+				return err
+			}
+			defer func() { client.Close() }()
+
+			state, err := newShellState(client)
+			if err != nil {
+				return err
+			}
+
 			line := liner.NewLiner()
 			defer line.Close()
+
+			historyPath, err := homedir.Expand("~/.config/vssh/history")
+			if err == nil {
+				h, err := os.Open(historyPath)
+				if err == nil {
+					_, _ = line.ReadHistory(h)
+				}
+				_ = h.Close()
+				defer func() {
+					err := os.MkdirAll(filepath.Dir(historyPath), 0700)
+					if err == nil {
+						h, err := os.Create(historyPath)
+						if err == nil {
+							_, _ = line.WriteHistory(h)
+							_ = h.Close()
+						}
+					}
+				}()
+			}
+
+			commands := []string{"ls", "lls", "get", "put", "cd", "lcd", "less", "lless", "lmkdir", "mkdir", "pwd", "lpwd", "rename", "rm", "rmdir", "exit", "help"}
 			line.SetCompleter(func(line string) []string {
 				args, err := shellwords.Parse(line)
 				if err != nil {
@@ -65,45 +136,52 @@ func sftpCommand() cli.Command {
 				if len(args) == 0 {
 					return commands
 				}
-				var c []string
-				if len(args) == 1 {
-					for _, n := range commands {
-						if strings.HasPrefix(n, strings.ToLower(line)) {
-							c = append(c, n)
-						}
+				cmdStart := strings.ToLower(args[0])
+				if linq.From(commands).Contains(cmdStart) {
+					props := state.complete(cmdStart, args[1:])
+					if len(props) == 0 {
+						return nil
 					}
+					linq.From(props).SelectT(func(p string) string { return cmdStart + " " + p }).ToSlice(&props)
+					return props
 				}
-				return c
+				if len(args) == 1 {
+					var props []string
+					linq.From(commands).WhereT(func(cmd string) bool { return strings.HasPrefix(cmd, cmdStart) }).ToSlice(&props)
+					return props
+				}
+				return nil
 			})
 			line.SetCtrlCAborts(true)
 			line.SetTabCompletionStyle(liner.TabCircular)
+
 		L:
 			for {
 				l, err := line.Prompt("> ")
-				if err == nil {
-					p := shellwords.NewParser()
-					args, err := p.Parse(l)
-					if err != nil {
-						fmt.Fprintln(os.Stderr, "Error reading line: ", err)
-					} else if p.Position != -1 {
-						fmt.Fprintln(os.Stderr, "Error reading line")
-					} else {
-						for _, arg := range args {
-							fmt.Println(arg)
-						}
-						switch args[0] {
-						case "exit":
-							break L
-						}
-					}
-					//line.AppendHistory(name)
-				} else if err == liner.ErrPromptAborted || err == io.EOF {
-					break L
-				} else {
+				if err == liner.ErrPromptAborted {
+					continue L
+				}
+				if err == io.EOF {
+					return nil
+				}
+				line.AppendHistory(l)
+				if err != nil {
 					fmt.Fprintln(os.Stderr, "Error reading line: ", err)
+					continue L
+				}
+				res, err := state.dispatch(l)
+				if err == io.EOF {
+					return nil
+				}
+				if err != nil {
+					fmt.Fprintln(os.Stderr, err.Error())
+					continue L
+				}
+				fmt.Print(res)
+				if res != "" && !strings.HasSuffix(res, "\n") {
+					fmt.Println()
 				}
 			}
-			return nil
 		},
 		Subcommands: []cli.Command{
 			sftpPutCommand(),
