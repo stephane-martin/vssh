@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-// Version stores the current version number of vssh. It it set by the Makefile.
-var Version string
+// version stores the current version number of vssh. It it set by the Makefile.
+var version string
 
 func main() {
 	app := App()

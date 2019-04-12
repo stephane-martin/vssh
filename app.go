@@ -2,8 +2,10 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
+	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 )
 
@@ -12,14 +14,22 @@ func App() *cli.App {
 	app := cli.NewApp()
 	app.Name = "vssh"
 	app.Usage = "SSH/SCP using certificates signed by Vault"
-	app.Version = Version
+	app.Version = version
 	app.Commands = []cli.Command{
 		sshCommand(),
 		scpCommand(),
 		sftpCommand(),
 		cli.Command{
+			Name:  "version",
+			Usage: "print vssh version",
+			Action: func(c *cli.Context) error {
+				fmt.Println(version)
+				return nil
+			},
+		},
+		cli.Command{
 			Name:  "less",
-			Usage: "show file content",
+			Usage: "show local file content",
 			Action: func(c *cli.Context) (e error) {
 				defer func() {
 					if e != nil {
@@ -35,7 +45,7 @@ func App() *cli.App {
 					return err
 				}
 				defer f.Close()
-				return showFile(args[0], f, c.GlobalBool("pager"))
+				return lib.ShowFile(args[0], f, c.GlobalBool("pager"))
 			},
 		},
 	}

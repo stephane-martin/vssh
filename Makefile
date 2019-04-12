@@ -8,8 +8,8 @@ SOURCES = $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 BINARY=vssh
 FULL=github.com/stephane-martin/vssh
 VERSION=0.3.1
-LDFLAGS=-ldflags '-X main.Version=${VERSION}' -gcflags "all=-N -l"
-LDFLAGS_RELEASE=-ldflags '-w -s -X main.Version=${VERSION}'
+LDFLAGS=-ldflags '-X main.version=${VERSION}' -gcflags "all=-N -l"
+LDFLAGS_RELEASE=-ldflags '-X main.version=${VERSION}'
 
 debug: ${BINARY}_debug
 release: ${BINARY}
@@ -19,10 +19,11 @@ install_vendor:
 
 ${BINARY}_debug: ${SOURCES}  
 	dep ensure
-	env CGO_ENABLED=0 go build -x -tags 'netgo osusergo' -o ${BINARY}-debug ${LDFLAGS} ${FULL}
+	env CGO_ENABLED=0 go build -tags 'netgo osusergo' -o ${BINARY}-debug ${LDFLAGS} ${FULL}
 
 ${BINARY}: ${SOURCES}
-	env CGO_ENABLED=0 go build -a -installsuffix nocgo -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
+	env CGO_ENABLED=0 go build -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
+	upx --best ${BINARY}
 
 editdoc:
 	nohup restview README.rst 1>/dev/null 2>/dev/null &

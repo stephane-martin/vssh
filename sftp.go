@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/ahmetb/go-linq"
 	"github.com/logrusorgru/aurora"
@@ -211,7 +212,80 @@ func sftpCommand() cli.Command {
 			sftpPutCommand(),
 			sftpGetCommand(),
 			{
-				Name: "list",
+				Name: "less",
+				Flags: []cli.Flag{
+					cli.StringFlag{
+						Name:  "target",
+						Usage: "file to copy from the remote server",
+					},
+				},
+				Usage: "show remote file",
+				Action: func(c *cli.Context) (e error) {
+					defer func() {
+						if e != nil {
+							e = cli.NewExitError(e.Error(), 1)
+						}
+					}()
+
+					target := strings.TrimSpace(c.String("target"))
+					if target == "" {
+						return errors.New("target not specified")
+					}
+
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					sigchan := make(chan os.Signal, 1)
+					signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+					go func() {
+						for range sigchan {
+							cancel()
+						}
+					}()
+
+					vaultParams := getVaultParams(c)
+					if vaultParams.SSHMount == "" {
+						return errors.New("empty SSH mount point")
+					}
+					if vaultParams.SSHRole == "" {
+						return errors.New("empty SSH role")
+					}
+
+					params := lib.Params{
+						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+					}
+
+					logger, err := vexec.Logger(params.LogLevel)
+					if err != nil {
+						return err
+					}
+					defer func() { _ = logger.Sync() }()
+
+					args := c.Args()
+					if len(args) == 0 {
+						return errors.New("no host provided")
+					}
+
+					sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
+					if err != nil {
+						return err
+					}
+
+					_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+					if err != nil {
+						return err
+					}
+					cb := func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error {
+						if isDir {
+							return errors.New("remote target is a directory")
+						}
+						return lib.ShowFile(name, lib.ReaderFileStater{Reader: content, Name: name}, c.GlobalBool("pager"))
+					}
+					return lib.SFTPGet(ctx, []string{target}, sshParams, privkey, signed, cb, logger)
+				},
+			},
+			{
+				Name:  "list",
+				Usage: "list remote files",
 				Flags: []cli.Flag{
 					cli.BoolFlag{
 						Name:  "color",
