@@ -100,7 +100,16 @@ func sftpCommand() cli.Command {
 			}
 			defer func() { client.Close() }()
 
-			state, err := newShellState(client)
+			state, err := newShellState(
+				client,
+				c.GlobalBool("pager"),
+				func(info string) {
+					fmt.Fprintln(os.Stderr, aurora.Blue(info))
+				},
+				func(err string) {
+					fmt.Fprintln(os.Stderr, aurora.Red(err))
+				},
+			)
 			if err != nil {
 				return err
 			}
@@ -127,7 +136,18 @@ func sftpCommand() cli.Command {
 				}()
 			}
 
-			commands := []string{"ls", "lls", "get", "put", "cd", "lcd", "less", "lless", "lmkdir", "mkdir", "pwd", "lpwd", "rename", "rm", "rmdir", "exit", "help"}
+			commands := []string{
+				"ls", "lls", "ll", "lll",
+				"get", "put",
+				"cd", "lcd",
+				"less", "lless",
+				"lmkdir", "mkdir",
+				"pwd", "lpwd",
+				"rename",
+				"rm", "rmdir",
+				"exit", "logout",
+				"help",
+			}
 			line.SetCompleter(func(line string) []string {
 				args, err := shellwords.Parse(line)
 				if err != nil {
@@ -157,24 +177,28 @@ func sftpCommand() cli.Command {
 
 		L:
 			for {
-				l, err := line.Prompt("> ")
+				prmpt := fmt.Sprintf("[%s] > ", state.RemoteWD)
+				l, err := line.Prompt(prmpt)
 				if err == liner.ErrPromptAborted {
 					continue L
 				}
 				if err == io.EOF {
 					return nil
 				}
-				line.AppendHistory(l)
+				if err == liner.ErrInvalidPrompt {
+					return err
+				}
 				if err != nil {
-					fmt.Fprintln(os.Stderr, "Error reading line: ", err)
+					fmt.Fprintln(os.Stderr, aurora.Red(fmt.Sprintf("Failed to read line: %s", err)))
 					continue L
 				}
+				line.AppendHistory(l)
 				res, err := state.dispatch(l)
 				if err == io.EOF {
 					return nil
 				}
 				if err != nil {
-					fmt.Fprintln(os.Stderr, err.Error())
+					fmt.Fprintln(os.Stderr, aurora.Red(err.Error()))
 					continue L
 				}
 				fmt.Print(res)

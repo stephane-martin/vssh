@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
+	"os"
 	"strings"
 
 	"github.com/awnumar/memguard"
 	"go.uber.org/zap"
 
-	"github.com/ktr0731/go-fuzzyfinder"
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
@@ -113,32 +112,17 @@ func wrapPut(f putFunc) cli.ActionFunc {
 
 		sourcesNames := filterOutEmptyStrings(c.StringSlice("source"))
 		if len(sourcesNames) == 0 {
-			var paths []entry
-			err := lib.WalkLocal(func(path, rel string, isdir bool) error {
-				if strings.HasPrefix(rel, ".") {
-					if isdir {
-						return filepath.SkipDir
-					}
-					return nil
-				}
-				paths = append(paths, entry{path: path, rel: rel, isdir: isdir})
-				return nil
-			}, logger)
+			wd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			idx, _ := fuzzyfinder.FindMulti(paths, func(i int) string {
-				if paths[i].isdir {
-					return folderIcon + paths[i].rel
-				}
-				return fileIcon + paths[i].rel
-			})
-			for _, i := range idx {
-				sourcesNames = append(sourcesNames, paths[i].path)
+			sourcesNames, err = lib.FuzzyLocal(wd, logger)
+			if err != nil {
+				return err
 			}
-		}
-		if len(sourcesNames) == 0 {
-			return errors.New("you must specify the sources")
+			if len(sourcesNames) == 0 {
+				return errors.New("you must specify the sources")
+			}
 		}
 
 		sources := make([]lib.Source, 0, len(sourcesNames))

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"os"
+
 	"github.com/urfave/cli"
 )
 
@@ -14,6 +17,27 @@ func App() *cli.App {
 		sshCommand(),
 		scpCommand(),
 		sftpCommand(),
+		cli.Command{
+			Name:  "less",
+			Usage: "show file content",
+			Action: func(c *cli.Context) (e error) {
+				defer func() {
+					if e != nil {
+						e = cli.NewExitError(e.Error(), 1)
+					}
+				}()
+				args := c.Args()
+				if len(args) != 1 {
+					return errors.New("less takes one argument")
+				}
+				f, err := os.Open(args[0])
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				return showFile(args[0], f, c.GlobalBool("pager"))
+			},
+		},
 	}
 	app.Flags = GlobalFlags()
 	return app
@@ -73,6 +97,11 @@ func GlobalFlags() []cli.Flag {
 			Name:  "loglevel",
 			Usage: "logging level",
 			Value: "info",
+		},
+		cli.BoolFlag{
+			Name:   "pager",
+			Usage:  "use external pager",
+			EnvVar: "VSSH_EXTERNAL_PAGER",
 		},
 	}
 }
