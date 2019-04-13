@@ -17,12 +17,12 @@ import (
 	"github.com/rivo/tview"
 )
 
-func TableOfFiles(dirname string, files []os.FileInfo) (SelectedFile, error) {
+func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFile, error) {
 	var selected atomic.Value
 	selected.Store(SelectedFile{})
 	var dirs, regulars, irregulars Unixfiles
 	for _, f := range files {
-		u, g := UserGroup(f)
+		u, g := UserGroup(f, remote)
 		uf := Unixfile{FileInfo: f, User: u, Group: g}
 		if f.IsDir() {
 			dirs = append(dirs, uf)
@@ -85,7 +85,7 @@ func TableOfFiles(dirname string, files []os.FileInfo) (SelectedFile, error) {
 	for _, d := range dirs {
 		c := tview.NewTableCell(d.paddedName(maxNameLength)).SetTextColor(tcell.ColorBlue)
 		if !strings.HasPrefix(d.Name(), ".") {
-			c.SetStyle(bold)
+			c.SetStyle(bold).SetTextColor(tcell.ColorBlue)
 		}
 		table.SetCell(row, 0, c)
 		table.SetCell(row, 2, tview.NewTableCell(d.paddedUser(maxUserLength)).SetTextColor(tcell.ColorYellow))
@@ -136,13 +136,16 @@ func TableOfFiles(dirname string, files []os.FileInfo) (SelectedFile, error) {
 	return selected.Load().(SelectedFile), err
 }
 
-func FormatListOfFiles(width int, long bool, files []os.FileInfo) (string, error) {
-	maxlen := linq.From(files).SelectT(func(info os.FileInfo) int {
-		if info.IsDir() {
-			return len(info.Name()) + 1
-		}
-		return len(info.Name())
-	}).Max().(int) + 1
+func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {
+	maxlen := int(1)
+	if len(files) != 0 {
+		maxlen += linq.From(files).SelectT(func(info Unixfile) int {
+			if info.IsDir() {
+				return len(info.Path) + 1
+			}
+			return len(info.Path)
+		}).Max().(int)
+	}
 	padfmt := "%-" + fmt.Sprintf("%d", maxlen) + "s"
 	columns := width / maxlen
 	if columns == 0 {
@@ -151,7 +154,7 @@ func FormatListOfFiles(width int, long bool, files []os.FileInfo) (string, error
 	percolumn := (len(files) / columns) + 1
 
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].Name() < files[j].Name()
+		return files[i].Path < files[j].Path
 	})
 	aur := aurora.NewAurora(true)
 	var name interface{}
@@ -168,23 +171,21 @@ func FormatListOfFiles(width int, long bool, files []os.FileInfo) (string, error
 			line = 1
 		}
 		if f.IsDir() {
-			name = aur.Blue(fmt.Sprintf(padfmt, f.Name()+"/"))
+			name = aur.Blue(fmt.Sprintf(padfmt, f.Path+"/"))
 		} else {
-			name = fmt.Sprintf(padfmt, f.Name())
+			name = fmt.Sprintf(padfmt, f.Path)
 		}
-		if !strings.HasPrefix(f.Name(), ".") {
+		if !strings.HasPrefix(f.Path, ".") {
 			name = aur.Bold(name)
 		}
 		lines[line-1] = append(lines[line-1], name)
 	}
-	var buf strings.Builder
 	for _, line := range lines {
 		for _, name := range line {
-			fmt.Fprint(&buf, name)
+			fmt.Fprint(buf, name)
 		}
-		fmt.Fprintln(&buf)
+		fmt.Fprintln(buf)
 	}
-	return buf.String(), nil
 }
 
 func ShowFile(fname string, f Stater, external bool) error {
@@ -210,7 +211,10 @@ func ShowFile(fname string, f Stater, external bool) error {
 		return showFileInternal(fname, f)
 	}
 	var buf bytes.Buffer
-	_ = Colorize(fname, f, &buf)
+	err = Colorize(fname, f, &buf)
+	if err != nil {
+		return err
+	}
 	c := exec.Command(p, "-R")
 	c.Stdin = &buf
 	c.Stdout = os.Stdout
@@ -246,7 +250,7 @@ func showFileInternal(fname string, f io.Reader) error {
 	box.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(" " + fname + " ")
 	err := Colorize(fname, f, box)
 	if err != nil {
-		// TODO
+		return err
 	}
 	err = app.SetRoot(box, true).Run()
 	if err != nil {

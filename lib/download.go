@@ -82,20 +82,7 @@ func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, 
 	if err != nil {
 		return err
 	}
-	walker := client.Walk(".")
-	for walker.Step() {
-		path := walker.Path()
-		infos := walker.Stat()
-		if walker.Err() == nil && path != "." && (infos.IsDir() || infos.Mode().IsRegular()) {
-			err := cb(filepath.Join(wd, path), path, infos.IsDir())
-			if err == filepath.SkipDir {
-				walker.SkipDir()
-			} else if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return WalkRemote(client, wd, cb, l)
 }
 
 func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
@@ -252,8 +239,6 @@ func SFTPGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert
 	}
 	return SFTPGetAuth(ctx, srcs, params, []ssh.AuthMethod{a}, cb, l)
 }
-
-type ListCallback func(path, relName string, isDir bool) error
 
 func SFTPList(ctx context.Context, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger, cb ListCallback) error {
 	a, err := makeAuthCertificate(privkey, cert)

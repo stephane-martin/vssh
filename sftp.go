@@ -105,10 +105,10 @@ func sftpCommand() cli.Command {
 				client,
 				c.GlobalBool("pager"),
 				func(info string) {
-					fmt.Fprintln(os.Stderr, aurora.Blue(info))
+					fmt.Fprintln(os.Stderr, aurora.Blue("-> "+info))
 				},
 				func(err string) {
-					fmt.Fprintln(os.Stderr, aurora.Red(err))
+					fmt.Fprintln(os.Stderr, aurora.Red("===> "+err))
 				},
 			)
 			if err != nil {
@@ -142,10 +142,10 @@ func sftpCommand() cli.Command {
 				"get", "put",
 				"cd", "lcd",
 				"less", "lless",
-				"lmkdir", "mkdir",
+				"mkdir", "lmkdir", "mkdirall", "lmkdirall",
 				"pwd", "lpwd",
 				"rename",
-				"rm", "rmdir",
+				"rm", "lrm", "rmdir", "lrmdir",
 				"exit", "logout",
 				"help",
 			}
@@ -199,7 +199,7 @@ func sftpCommand() cli.Command {
 					return nil
 				}
 				if err != nil {
-					fmt.Fprintln(os.Stderr, aurora.Red(err.Error()))
+					fmt.Fprintln(os.Stderr, aurora.Red("===> "+err.Error()))
 					continue L
 				}
 				fmt.Print(res)

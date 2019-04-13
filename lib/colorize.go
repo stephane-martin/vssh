@@ -19,10 +19,17 @@ func Colorize(name string, text io.Reader, out io.Writer) error {
 	if ext == ".pdf" {
 		return PDFToText(text, out)
 	}
+	t, err := ioutil.ReadAll(text)
+	if err != nil {
+		return err
+	}
+	if IsBinary(t) {
+		return errors.New("looks like binary")
+	}
 	lexer := lexers.Match(filepath.Base(name))
 	if lexer == nil {
-		_, _ = io.Copy(out, text)
-		return errors.New("lexer not found")
+		_, err := out.Write(t)
+		return err
 	}
 	styleName := os.Getenv("VSSH_THEME")
 	if styleName == "" {
@@ -30,21 +37,14 @@ func Colorize(name string, text io.Reader, out io.Writer) error {
 	}
 	style := styles.Get(styleName)
 	if style == nil {
-		_, _ = io.Copy(out, text)
 		return errors.New("style not found")
 	}
 	formatter := formatters.Get("terminal256")
 	if formatter == nil {
-		_, _ = io.Copy(out, text)
 		return errors.New("formatter not found")
-	}
-	t, err := ioutil.ReadAll(text)
-	if err != nil {
-		return err
 	}
 	iterator, err := lexer.Tokenise(nil, string(t))
 	if err != nil {
-		_, _ = out.Write(t)
 		return err
 	}
 	if box, ok := out.(*tview.TextView); ok {

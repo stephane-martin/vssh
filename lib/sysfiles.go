@@ -44,6 +44,7 @@ type Unixfile struct {
 	os.FileInfo
 	User  string
 	Group string
+	Path  string
 }
 
 func (f Unixfile) paddedName(l int) string {
@@ -65,17 +66,32 @@ func (f Unixfile) paddedGroup(l int) string {
 type Unixfiles []Unixfile
 
 func (files Unixfiles) maxNameLength() int {
+	if len(files) == 0 {
+		return 0
+	}
 	return linq.From(files).SelectT(func(file Unixfile) int { return len(file.Name()) }).Max().(int)
 }
 
 func (files Unixfiles) maxSizeLength() int {
+	if len(files) == 0 {
+		return 0
+	}
+
 	return linq.From(files).SelectT(func(file Unixfile) int { return len(fmt.Sprintf("%d", file.Size())) }).Max().(int)
 }
 
 func (files Unixfiles) maxUserLength() int {
+	if len(files) == 0 {
+		return 0
+	}
+
 	return linq.From(files).SelectT(func(file Unixfile) int { return len(file.User) }).Max().(int)
 }
 
 func (files Unixfiles) maxGroupLength() int {
+	if len(files) == 0 {
+		return 0
+	}
+
 	return linq.From(files).SelectT(func(file Unixfile) int { return len(file.Group) }).Max().(int)
 }

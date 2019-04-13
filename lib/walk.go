@@ -6,6 +6,7 @@ import (
 
 	"github.com/karrick/godirwalk"
 	"github.com/ktr0731/go-fuzzyfinder"
+	"github.com/pkg/sftp"
 	"go.uber.org/zap"
 )
 
@@ -16,6 +17,18 @@ type entry struct {
 	path  string
 	rel   string
 	isdir bool
+}
+
+type ListCallback func(path, relName string, isDir bool) error
+type walkFunc func(wd string, cb ListCallback, l *zap.SugaredLogger) error
+
+func getWalkFunc(client *sftp.Client) walkFunc {
+	if client == nil {
+		return WalkLocal
+	}
+	return func(wd string, cb ListCallback, l *zap.SugaredLogger) error {
+		return WalkRemote(client, wd, cb, l)
+	}
 }
 
 func WalkLocal(wd string, cb ListCallback, l *zap.SugaredLogger) error {
@@ -42,10 +55,36 @@ func WalkLocal(wd string, cb ListCallback, l *zap.SugaredLogger) error {
 	})
 }
 
-func FuzzyLocal(wd string, logger *zap.SugaredLogger) ([]string, error) {
+func WalkRemote(client *sftp.Client, wd string, cb ListCallback, l *zap.SugaredLogger) error {
+	walker := client.Walk(wd)
+	for walker.Step() {
+		osPathName := walker.Path() // p is in form wd/path
+		relName, err := filepath.Rel(wd, osPathName)
+		if err != nil {
+			return err // should not happen
+		}
+		infos := walker.Stat()
+		if walker.Err() != nil {
+			if l != nil {
+				l.Debugw("error walking current directory", "path", relName, "error", walker.Err())
+			}
+		} else if relName != "." && (infos.IsDir() || infos.Mode().IsRegular()) {
+			err := cb(osPathName, relName, infos.IsDir())
+			if err == filepath.SkipDir {
+				walker.SkipDir()
+			} else if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func fuzzy(client *sftp.Client, wd string, l *zap.SugaredLogger) ([]string, error) {
 	var names []string
 	var paths []entry
-	err := WalkLocal(wd, func(path, rel string, isdir bool) error {
+	walk := getWalkFunc(client)
+	err := walk(wd, func(path, rel string, isdir bool) error {
 		if strings.HasPrefix(rel, ".") {
 			if isdir {
 				return filepath.SkipDir
@@ -54,7 +93,7 @@ func FuzzyLocal(wd string, logger *zap.SugaredLogger) ([]string, error) {
 		}
 		paths = append(paths, entry{path: path, rel: rel, isdir: isdir})
 		return nil
-	}, logger)
+	}, l)
 	if err != nil {
 		return nil, err
 	}
@@ -68,4 +107,12 @@ func FuzzyLocal(wd string, logger *zap.SugaredLogger) ([]string, error) {
 		names = append(names, paths[i].path)
 	}
 	return names, nil
+}
+
+func FuzzyLocal(wd string, l *zap.SugaredLogger) ([]string, error) {
+	return fuzzy(nil, wd, l)
+}
+
+func FuzzyRemote(client *sftp.Client, wd string, l *zap.SugaredLogger) ([]string, error) {
+	return fuzzy(client, wd, l)
 }

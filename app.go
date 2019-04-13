@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
@@ -19,6 +20,20 @@ func App() *cli.App {
 		sshCommand(),
 		scpCommand(),
 		sftpCommand(),
+		cli.Command{
+			Name: "glob",
+			Action: func(c *cli.Context) error {
+				matches, err := filepath.Glob(c.Args()[0])
+				if err != nil {
+					return cli.NewExitError(err.Error(), 1)
+				}
+				for _, m := range matches {
+					fmt.Println(m)
+				}
+				return nil
+			},
+		},
+
 		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",

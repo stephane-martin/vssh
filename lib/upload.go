@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -328,15 +329,15 @@ func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SS
 }
 
 func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.SugaredLogger) error {
-	d, err := os.Open(dirname)
+	stats, err := os.Stat(dirname)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = d.Close() }()
-	stats, err := d.Stat()
+	files, err := ioutil.ReadDir(dirname)
 	if err != nil {
 		return err
 	}
+
 	l.Debugw("uploading directory", "name", dirname)
 	sName := filepath.Base(dirname)
 	if strings.Contains(sName, "\n") {
@@ -363,13 +364,9 @@ func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.
 		return fmt.Errorf("scp status %d: %s", code, message)
 	}
 
-	filenames, err := d.Readdirnames(-1)
-	if err != nil {
-		return err
-	}
 	// TODO: filter out irregular files
-	for _, fname := range filenames {
-		fname = filepath.Join(dirname, fname)
+	for _, file := range files {
+		fname := filepath.Join(dirname, file.Name())
 		s, err := MakeSource(fname)
 		if err != nil {
 			if os.IsNotExist(err) {

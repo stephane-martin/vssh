@@ -375,6 +375,14 @@
   version = "v1.0.0"
 
 [[projects]]
+  digest = "1:6f3ce746342be7b14a2d1ca33a4a11fd6cb0300e5d34c766f01e19e936fb10af"
+  name = "github.com/scylladb/go-set"
+  packages = ["strset"]
+  pruneopts = "UT"
+  revision = "e560bb8f49bb7f34d4f59b7e771f6e1307c329da"
+  version = "v1.0.2"
+
+[[projects]]
   branch = "master"
   digest = "1:5eb88d3fa3392fc3b8b036bd18a2a7b6bbf89da41d8dd89f16b34b4e00dd6cf3"
   name = "github.com/stephane-martin/go-vis"
@@ -553,6 +561,7 @@
     "github.com/peterh/liner",
     "github.com/pkg/sftp",
     "github.com/rivo/tview",
+    "github.com/scylladb/go-set/strset",
     "github.com/stephane-martin/go-vis",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",
