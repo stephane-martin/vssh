@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ahmetb/go-linq"
@@ -578,41 +579,46 @@ func (s *shellstate) cd(args []string) (string, error) {
 	return "", nil
 }
 
-func findMatches(args []string, localWD string) (*strset.Set, error) {
-	allmatches := strset.New()
+func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, error) {
+	var glob func(string, string) ([]string, error)
+	if client == nil {
+		glob = lib.LocalGlob
+	} else {
+		glob = func(wd string, pattern string) ([]string, error) {
+			return lib.SFTPGlob(wd, client, pattern)
+		}
+	}
 	// no arg ==> list all files in current directory
+	allmatches := strset.New()
 	if len(args) == 0 {
-		allmatches.Add(localWD)
+		allmatches.Add(wd)
 		return allmatches, nil
-	}
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	err = os.Chdir(localWD)
-	if err != nil {
-		return nil, err
 	}
 	for _, pattern := range args {
 		// list matching files
-		matches, err := filepath.Glob(pattern)
+		matches, err := glob(wd, pattern)
 		if err != nil {
-			_ = os.Chdir(wd)
 			return nil, fmt.Errorf("invalid pattern %s: %s", pattern, err)
 		}
 		for _, match := range matches {
-			allmatches.Add(join(localWD, match))
+			allmatches.Add(join(wd, match))
 		}
-	}
-	err = os.Chdir(wd)
-	if err != nil {
-		return nil, err
 	}
 	return allmatches, nil
 }
 
-func (s *shellstate) lls(args []string) (string, error) {
-	allmatches, err := findMatches(args, s.LocalWD)
+func _ls(wd string, width int, args []string, client *sftp.Client) (string, error) {
+	var stat func(path string) (os.FileInfo, error)
+	var readdir func(string) ([]os.FileInfo, error)
+	if client == nil {
+		stat = os.Stat
+		readdir = ioutil.ReadDir
+	} else {
+		stat = client.Stat
+		readdir = client.ReadDir
+	}
+
+	allmatches, err := findMatches(args, wd, client)
 	if err != nil {
 		return "", err
 	}
@@ -621,16 +627,17 @@ func (s *shellstate) lls(args []string) (string, error) {
 	files["."] = strset.New()
 
 	allmatches.Each(func(match string) bool {
-		relMatch, err := filepath.Rel(s.LocalWD, match)
+		relMatch, err := filepath.Rel(wd, match)
 		if err != nil {
 			return true
 		}
-		stats, err := os.Stat(match)
+
+		stats, err := stat(match)
 		if err != nil {
 			return true
 		}
 		if stats.IsDir() {
-			entries, err := ioutil.ReadDir(match)
+			entries, err := readdir(match)
 			if err != nil {
 				return true
 			}
@@ -638,7 +645,7 @@ func (s *shellstate) lls(args []string) (string, error) {
 				files[relMatch] = strset.New()
 			}
 			for _, entry := range entries {
-				files[relMatch].Add(join(relMatch, entry.Name()))
+				files[relMatch].Add(entry.Name())
 			}
 		} else {
 			files["."].Add(relMatch)
@@ -647,23 +654,50 @@ func (s *shellstate) lls(args []string) (string, error) {
 	})
 
 	var buf strings.Builder
-	for d, f := range files {
-		fmt.Fprintln(&buf, "directory", d)
+	printDirectory := func(d string, f *strset.Set) {
+		if f.Size() == 0 {
+			return
+		}
+		if d != "." {
+			fmt.Fprintf(&buf, "%s:\n", d)
+		}
 		stats := make([]lib.Unixfile, 0, f.Size())
-		f.Each(func(fname string) bool {
-			s, err := os.Stat(fname)
+		names := f.List()
+		sort.Strings(names)
+		for _, fname := range names {
+			s, err := stat(join(join(wd, d), fname))
 			if err != nil {
-				return true
+				continue
 			}
 			stats = append(stats, lib.Unixfile{FileInfo: s, Path: fname})
-			return true
-		})
-		lib.FormatListOfFiles(s.width(), false, stats, &buf)
+		}
+		lib.FormatListOfFiles(width, false, stats, &buf)
 		fmt.Fprintln(&buf)
 	}
 
+	dirnames := make([]string, 0, len(files))
+	for dirname := range files {
+		dirnames = append(dirnames, dirname)
+	}
+	sort.Strings(dirnames)
+	if f, ok := files["."]; ok {
+		printDirectory(".", f)
+	}
+	for _, dirname := range dirnames {
+		if dirname == "." {
+			continue
+		}
+		printDirectory(dirname, files[dirname])
+	}
 	return buf.String(), nil
-	//return lib.FormatListOfFiles(s.width(), false, files)
+}
+
+func (s *shellstate) lls(args []string) (string, error) {
+	return _ls(s.LocalWD, s.width(), args, nil)
+}
+
+func (s *shellstate) ls(args []string) (string, error) {
+	return _ls(s.RemoteWD, s.width(), args, s.client)
 }
 
 func (s *shellstate) lll(args []string) (string, error) {
@@ -728,22 +762,6 @@ func (s *shellstate) ll(args []string) (string, error) {
 			}
 		}
 	}
-}
-
-func (s *shellstate) ls(args []string) (string, error) {
-	files, err := s.client.ReadDir(s.RemoteWD)
-	if err != nil {
-		return "", fmt.Errorf("error listing directory: %s", err)
-	}
-	if len(files) == 0 {
-		fmt.Println()
-		return "", nil
-	}
-	ufiles := make([]lib.Unixfile, 0, len(files))
-	linq.From(files).SelectT(func(f os.FileInfo) lib.Unixfile { return lib.Unixfile{FileInfo: f, Path: f.Name()} }).ToSlice(&ufiles)
-	var buf strings.Builder
-	lib.FormatListOfFiles(s.width(), false, ufiles, &buf)
-	return buf.String(), nil
 }
 
 func (s *shellstate) completeLess(args []string) []string {
