@@ -91,12 +91,14 @@ func glob(wd, dir, pattern string, matches []string, readDir readDirNamesFunc) (
 	sort.Strings(names)
 
 	for _, n := range names {
-		matched, err := filepath.Match(pattern, n)
-		if err != nil {
-			return m, err
-		}
-		if matched {
-			m = append(m, filepath.Join(dir, n))
+		if !strings.HasPrefix(n, ".") {
+			matched, err := filepath.Match(pattern, n)
+			if err != nil {
+				return m, err
+			}
+			if matched {
+				m = append(m, filepath.Join(dir, n))
+			}
 		}
 	}
 	return

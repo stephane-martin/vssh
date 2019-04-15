@@ -20,7 +20,7 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
-type command func([]string) (string, error)
+type command func([]string, *strset.Set) (string, error)
 
 type cmpl func([]string) []string
 
@@ -96,7 +96,7 @@ func (s *shellstate) width() int {
 	return width
 }
 
-func (s *shellstate) exit(_ []string) (string, error) {
+func (s *shellstate) exit(_ []string, flags *strset.Set) (string, error) {
 	return "", io.EOF
 }
 
@@ -123,11 +123,19 @@ func (s *shellstate) dispatch(line string) (string, error) {
 		return "", errors.New("incomplete parsing error")
 	}
 	cmd := strings.ToLower(args[0])
+	var posargs, flags []string
+	linq.From(args[1:]).WhereT(func(s string) bool { return !strings.HasPrefix(s, "-") }).ToSlice(&posargs)
+	linq.From(args[1:]).WhereT(func(s string) bool {
+		return strings.HasPrefix(s, "-")
+	}).SelectT(func(s string) string {
+		return strings.TrimLeft(s, "-")
+	}).ToSlice(&flags)
+	sflags := strset.New(flags...)
 	fun := s.methods[cmd]
 	if fun == nil {
 		return "", fmt.Errorf("unknown command: %s", cmd)
 	}
-	return fun(args[1:])
+	return fun(posargs, sflags)
 }
 
 func join(dname, fname string) string {
@@ -140,7 +148,7 @@ func join(dname, fname string) string {
 	return filepath.Join(dname, fname)
 }
 
-func (s *shellstate) rename(args []string) (string, error) {
+func (s *shellstate) rename(args []string, flags *strset.Set) (string, error) {
 	if len(args) != 2 {
 		return "", errors.New("rename takes two arguments")
 	}
@@ -149,7 +157,7 @@ func (s *shellstate) rename(args []string) (string, error) {
 	return "", s.client.Rename(from, to)
 }
 
-func (s *shellstate) mkdir(args []string) (string, error) {
+func (s *shellstate) mkdir(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("mkdir needs at least one argument")
 	}
@@ -163,7 +171,7 @@ func (s *shellstate) mkdir(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) rm(args []string) (string, error) {
+func (s *shellstate) rm(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("rm needs at least one argument")
 	}
@@ -177,7 +185,7 @@ func (s *shellstate) rm(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) rmdir(args []string) (string, error) {
+func (s *shellstate) rmdir(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("rmdir needs at least one argument")
 	}
@@ -229,7 +237,7 @@ func (s *shellstate) rmdir(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) mkdirall(args []string) (string, error) {
+func (s *shellstate) mkdirall(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("mkdirall needs at least one argument")
 	}
@@ -243,7 +251,7 @@ func (s *shellstate) mkdirall(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) lmkdir(args []string) (string, error) {
+func (s *shellstate) lmkdir(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("lmkdir needs at least one argument")
 	}
@@ -257,7 +265,7 @@ func (s *shellstate) lmkdir(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) lrm(args []string) (string, error) {
+func (s *shellstate) lrm(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("lrm needs at least one argument")
 	}
@@ -271,7 +279,7 @@ func (s *shellstate) lrm(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) lrmdir(args []string) (string, error) {
+func (s *shellstate) lrmdir(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("lrmdir needs at least one argument")
 	}
@@ -285,7 +293,7 @@ func (s *shellstate) lrmdir(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) lmkdirall(args []string) (string, error) {
+func (s *shellstate) lmkdirall(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		return "", errors.New("lmkdirall needs at least one argument")
 	}
@@ -299,7 +307,7 @@ func (s *shellstate) lmkdirall(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) less(args []string) (string, error) {
+func (s *shellstate) less(args []string, flags *strset.Set) (string, error) {
 	if len(args) != 1 {
 		return "", errors.New("less takes one argument")
 	}
@@ -312,7 +320,7 @@ func (s *shellstate) less(args []string) (string, error) {
 	return "", lib.ShowFile(fname, f, s.externalPager)
 }
 
-func (s *shellstate) lless(args []string) (string, error) {
+func (s *shellstate) lless(args []string, flags *strset.Set) (string, error) {
 	if len(args) != 1 {
 		return "", errors.New("less takes one argument")
 	}
@@ -325,7 +333,7 @@ func (s *shellstate) lless(args []string) (string, error) {
 	return "", lib.ShowFile(fname, f, s.externalPager)
 }
 
-func (s *shellstate) get(args []string) (string, error) {
+func (s *shellstate) get(args []string, flags *strset.Set) (string, error) {
 	remoteWD := s.RemoteWD
 	if len(args) == 0 {
 		names, err := lib.FuzzyRemote(s.client, remoteWD, nil)
@@ -419,7 +427,7 @@ func (s *shellstate) getdir(targetLocalDir, remoteDir string) error {
 	return nil
 }
 
-func (s *shellstate) put(args []string) (string, error) {
+func (s *shellstate) put(args []string, flags *strset.Set) (string, error) {
 	localWD := s.LocalWD
 	if len(args) == 0 {
 		names, err := lib.FuzzyLocal(localWD, nil)
@@ -513,21 +521,21 @@ func (s *shellstate) putdir(targetRemoteDir, localDir string) error {
 	return nil
 }
 
-func (s *shellstate) pwd(args []string) (string, error) {
+func (s *shellstate) pwd(args []string, flags *strset.Set) (string, error) {
 	if len(args) != 0 {
 		return "", errors.New("pwd takes no argument")
 	}
 	return s.RemoteWD, nil
 }
 
-func (s *shellstate) lpwd(args []string) (string, error) {
+func (s *shellstate) lpwd(args []string, flags *strset.Set) (string, error) {
 	if len(args) != 0 {
 		return "", errors.New("lpwd takes no argument")
 	}
 	return s.LocalWD, nil
 }
 
-func (s *shellstate) lcd(args []string) (string, error) {
+func (s *shellstate) lcd(args []string, flags *strset.Set) (string, error) {
 	if len(args) > 1 {
 		return "", errors.New("lcd takes only one argument")
 	}
@@ -555,7 +563,7 @@ func (s *shellstate) lcd(args []string) (string, error) {
 	return "", nil
 }
 
-func (s *shellstate) cd(args []string) (string, error) {
+func (s *shellstate) cd(args []string, flags *strset.Set) (string, error) {
 	if len(args) > 1 {
 		return "", errors.New("cd takes only one argument")
 	}
@@ -580,6 +588,11 @@ func (s *shellstate) cd(args []string) (string, error) {
 }
 
 func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, error) {
+	allmatches := strset.New()
+	if len(args) == 0 {
+		return allmatches, nil
+	}
+
 	var glob func(string, string) ([]string, error)
 	if client == nil {
 		glob = lib.LocalGlob
@@ -588,12 +601,7 @@ func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, er
 			return lib.SFTPGlob(wd, client, pattern)
 		}
 	}
-	// no arg ==> list all files in current directory
-	allmatches := strset.New()
-	if len(args) == 0 {
-		allmatches.Add(wd)
-		return allmatches, nil
-	}
+
 	for _, pattern := range args {
 		// list matching files
 		matches, err := glob(wd, pattern)
@@ -607,7 +615,7 @@ func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, er
 	return allmatches, nil
 }
 
-func _ls(wd string, width int, args []string, client *sftp.Client) (string, error) {
+func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Client) (string, error) {
 	var stat func(path string) (os.FileInfo, error)
 	var readdir func(string) ([]os.FileInfo, error)
 	if client == nil {
@@ -617,11 +625,20 @@ func _ls(wd string, width int, args []string, client *sftp.Client) (string, erro
 		stat = client.Stat
 		readdir = client.ReadDir
 	}
+	showHidden := flags.Has("a")
 
-	allmatches, err := findMatches(args, wd, client)
-	if err != nil {
-		return "", err
+	allmatches := strset.New()
+	if len(args) == 0 {
+		// no arg ==> list all files in current directory
+		allmatches.Add(wd)
+	} else {
+		var err error
+		allmatches, err = findMatches(args, wd, client)
+		if err != nil {
+			return "", err
+		}
 	}
+
 	// map of directory ==> files
 	files := make(map[string]*strset.Set)
 	files["."] = strset.New()
@@ -665,13 +682,15 @@ func _ls(wd string, width int, args []string, client *sftp.Client) (string, erro
 		names := f.List()
 		sort.Strings(names)
 		for _, fname := range names {
-			s, err := stat(join(join(wd, d), fname))
-			if err != nil {
-				continue
+			if showHidden || !strings.HasPrefix(fname, ".") {
+				s, err := stat(join(join(wd, d), fname))
+				if err != nil {
+					continue
+				}
+				stats = append(stats, lib.Unixfile{FileInfo: s, Path: fname})
 			}
-			stats = append(stats, lib.Unixfile{FileInfo: s, Path: fname})
 		}
-		lib.FormatListOfFiles(width, false, stats, &buf)
+		lib.FormatListOfFiles(width, flags.Has("l"), stats, &buf)
 		fmt.Fprintln(&buf)
 	}
 
@@ -692,15 +711,15 @@ func _ls(wd string, width int, args []string, client *sftp.Client) (string, erro
 	return buf.String(), nil
 }
 
-func (s *shellstate) lls(args []string) (string, error) {
-	return _ls(s.LocalWD, s.width(), args, nil)
+func (s *shellstate) lls(args []string, flags *strset.Set) (string, error) {
+	return _ls(s.LocalWD, s.width(), args, flags, nil)
 }
 
-func (s *shellstate) ls(args []string) (string, error) {
-	return _ls(s.RemoteWD, s.width(), args, s.client)
+func (s *shellstate) ls(args []string, flags *strset.Set) (string, error) {
+	return _ls(s.RemoteWD, s.width(), args, flags, s.client)
 }
 
-func (s *shellstate) lll(args []string) (string, error) {
+func (s *shellstate) lll(args []string, flags *strset.Set) (string, error) {
 	for {
 		files, err := ioutil.ReadDir(s.LocalWD)
 		if err != nil {
@@ -714,17 +733,17 @@ func (s *shellstate) lll(args []string) (string, error) {
 			return "", nil
 		}
 		if selected.Name == ".." {
-			_, err := s.lcd([]string{".."})
+			_, err := s.lcd([]string{".."}, strset.New())
 			if err != nil {
 				return "", err
 			}
 		} else if selected.Mode.IsDir() {
-			_, err := s.lcd([]string{selected.Name})
+			_, err := s.lcd([]string{selected.Name}, strset.New())
 			if err != nil {
 				return "", err
 			}
 		} else {
-			_, err := s.lless([]string{selected.Name})
+			_, err := s.lless([]string{selected.Name}, strset.New())
 			if err != nil {
 				return "", err
 			}
@@ -732,7 +751,7 @@ func (s *shellstate) lll(args []string) (string, error) {
 	}
 }
 
-func (s *shellstate) ll(args []string) (string, error) {
+func (s *shellstate) ll(args []string, flags *strset.Set) (string, error) {
 	for {
 		files, err := s.client.ReadDir(s.RemoteWD)
 		if err != nil {
@@ -746,17 +765,17 @@ func (s *shellstate) ll(args []string) (string, error) {
 			return "", nil
 		}
 		if selected.Name == ".." {
-			_, err := s.cd([]string{".."})
+			_, err := s.cd([]string{".."}, strset.New())
 			if err != nil {
 				return "", err
 			}
 		} else if selected.Mode.IsDir() {
-			_, err := s.cd([]string{selected.Name})
+			_, err := s.cd([]string{selected.Name}, strset.New())
 			if err != nil {
 				return "", err
 			}
 		} else {
-			_, err := s.less([]string{selected.Name})
+			_, err := s.less([]string{selected.Name}, strset.New())
 			if err != nil {
 				return "", err
 			}
