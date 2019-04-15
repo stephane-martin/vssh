@@ -141,6 +141,7 @@ func sftpCommand() cli.Command {
 				"ls", "lls", "ll", "lll",
 				"get", "put",
 				"cd", "lcd",
+				"edit", "ledit",
 				"less", "lless",
 				"mkdir", "lmkdir", "mkdirall", "lmkdirall",
 				"pwd", "lpwd",

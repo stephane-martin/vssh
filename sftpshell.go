@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +20,14 @@ import (
 	"github.com/scylladb/go-set/strset"
 	"github.com/stephane-martin/vssh/lib"
 	"golang.org/x/crypto/ssh/terminal"
+)
+
+type only int
+
+const (
+	filesAndDirs only = iota
+	onlyFiles
+	onlyDirs
 )
 
 type command func([]string, *strset.Set) (string, error)
@@ -63,8 +73,11 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"lll":       s.lll,
 		"cd":        s.cd,
 		"lcd":       s.lcd,
+		"edit":      s.edit,
+		"ledit":     s.ledit,
 		"exit":      s.exit,
 		"logout":    s.exit,
+		":q":        s.exit,
 		"pwd":       s.pwd,
 		"lpwd":      s.lpwd,
 		"get":       s.get,
@@ -587,19 +600,22 @@ func (s *shellstate) cd(args []string, flags *strset.Set) (string, error) {
 	return "", nil
 }
 
-func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, error) {
+func findMatches(args []string, wd string, client *sftp.Client, o only) (*strset.Set, error) {
 	allmatches := strset.New()
 	if len(args) == 0 {
 		return allmatches, nil
 	}
 
 	var glob func(string, string) ([]string, error)
+	var stat func(string) (os.FileInfo, error)
 	if client == nil {
 		glob = lib.LocalGlob
+		stat = os.Stat
 	} else {
 		glob = func(wd string, pattern string) ([]string, error) {
 			return lib.SFTPGlob(wd, client, pattern)
 		}
+		stat = client.Stat
 	}
 
 	for _, pattern := range args {
@@ -609,10 +625,196 @@ func findMatches(args []string, wd string, client *sftp.Client) (*strset.Set, er
 			return nil, fmt.Errorf("invalid pattern %s: %s", pattern, err)
 		}
 		for _, match := range matches {
-			allmatches.Add(join(wd, match))
+			match = join(wd, match)
+			if o == filesAndDirs {
+				allmatches.Add(match)
+			} else {
+				stats, err := stat(match)
+				if err != nil {
+					return nil, err
+				}
+				if o == onlyDirs && stats.IsDir() {
+					allmatches.Add(match)
+				} else if o == onlyFiles && stats.Mode().IsRegular() {
+					allmatches.Add(match)
+				}
+			}
 		}
 	}
 	return allmatches, nil
+}
+
+func (s *shellstate) ledit(args []string, flags *strset.Set) (string, error) {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vim"
+	}
+	editorExe, err := exec.LookPath(editor)
+	if err != nil {
+		return "", err
+	}
+	if len(args) == 0 {
+		// TODO: fuzzy find
+		return "", errors.New("no file")
+	}
+	allmatches, err := findMatches(args, s.LocalWD, nil, onlyFiles)
+	if err != nil {
+		return "", err
+	}
+	if allmatches.Size() == 0 {
+		// TODO: create new file
+		return "", nil
+	}
+	cmd := exec.Command(editorExe, allmatches.List()...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return "", cmd.Run()
+}
+
+func hashLocalFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	if err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
+}
+
+func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vim"
+	}
+	editorExe, err := exec.LookPath(editor)
+	if err != nil {
+		return "", err
+	}
+	if len(args) == 0 {
+		// TODO: fuzzy find
+		return "", errors.New("no file")
+	}
+	allmatches, err := findMatches(args, s.RemoteWD, s.client, onlyFiles)
+	if err != nil {
+		return "", err
+	}
+	if allmatches.Size() == 0 {
+		// TODO: create new file
+		return "", errors.New("no match")
+	}
+
+	// remote file to edit => local filename
+	tempFiles := make(map[string]string)
+	initialHashes := make(map[string][]byte)
+
+	copyTemp := func(match string) error {
+		f, err := s.client.Open(match)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		stats, err := f.Stat()
+		if err != nil {
+			return err
+		}
+		if stats.IsDir() || !stats.Mode().IsRegular() {
+			return nil
+		}
+		// create a temp directory for each file to edit
+		t, err := ioutil.TempDir("", "vssh-shell-edit")
+		if err != nil {
+			return err
+		}
+		dest := join(t, filepath.Base(f.Name()))
+		destFile, err := os.Create(dest)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = destFile.Close() }()
+		_, err = io.Copy(destFile, f)
+		_ = destFile.Close()
+		if err != nil {
+			_ = os.RemoveAll(t)
+			return err
+		}
+		err = os.Chmod(dest, stats.Mode().Perm()&0700)
+		if err != nil {
+			_ = os.RemoveAll(t)
+			return err
+		}
+		h, err := hashLocalFile(dest)
+		if err != nil {
+			_ = os.RemoveAll(t)
+			return err
+		}
+		tempFiles[match] = dest
+		initialHashes[match] = h
+		return nil
+	}
+
+	for _, remoteFilename := range allmatches.List() {
+		// copy remote files to temp directories
+		err := copyTemp(remoteFilename)
+		if err != nil {
+			s.err(fmt.Sprintf("%s: %s", remoteFilename, err))
+		}
+	}
+	if len(tempFiles) == 0 {
+		return "", nil
+	}
+	tempFilesList := make([]string, 0, len(tempFiles))
+	for _, tempFilename := range tempFiles {
+		tempFilesList = append(tempFilesList, tempFilename)
+		defer func() {
+			_ = os.RemoveAll(filepath.Dir(tempFilename))
+		}()
+	}
+
+	cmd := exec.Command(editorExe, tempFilesList...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	upload := func(remoteFilename, tempFilename string) error {
+		local, err := os.Open(tempFilename)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = local.Close() }()
+		remote, err := s.client.Create(remoteFilename)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = remote.Close() }()
+		_, err = io.Copy(remote, local)
+		return err
+	}
+
+	// copy back the modified files to the remote side if needed
+	for remoteFilename, tempFilename := range tempFiles {
+		previousHash := initialHashes[remoteFilename]
+		newHash, err := hashLocalFile(tempFilename)
+		if err != nil {
+			return "", err
+		}
+		if !bytes.Equal(previousHash, newHash) {
+			err := upload(remoteFilename, tempFilename)
+			if err != nil {
+				s.err(fmt.Sprintf("%s: %s", remoteFilename, err))
+			}
+		}
+
+	}
+	return "", nil
 }
 
 func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Client) (string, error) {
@@ -633,7 +835,7 @@ func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Cl
 		allmatches.Add(wd)
 	} else {
 		var err error
-		allmatches, err = findMatches(args, wd, client)
+		allmatches, err = findMatches(args, wd, client, filesAndDirs)
 		if err != nil {
 			return "", err
 		}
@@ -797,7 +999,7 @@ func (s *shellstate) completeLess(args []string) []string {
 		return nil
 	}
 
-	props := completeFiles(cand, files, false, false)
+	props := completeFiles(cand, files, filesAndDirs)
 	if len(props) == 0 {
 		return nil
 	}
@@ -850,7 +1052,7 @@ func (s *shellstate) completeLless(args []string) []string {
 	if err != nil {
 		return nil
 	}
-	props := completeFiles(cand, files, false, false)
+	props := completeFiles(cand, files, filesAndDirs)
 	if len(props) == 0 {
 		return nil
 	}
@@ -873,7 +1075,7 @@ func (s *shellstate) completeLcd(args []string) []string {
 	if err != nil {
 		return nil
 	}
-	props := completeFiles(cand, files, true, false)
+	props := completeFiles(cand, files, onlyDirs)
 	if len(props) == 0 {
 		return nil
 	}
@@ -896,7 +1098,7 @@ func (s *shellstate) completeCd(args []string) []string {
 	if err != nil {
 		return nil
 	}
-	props := completeFiles(cand, files, true, false)
+	props := completeFiles(cand, files, onlyDirs)
 	if len(props) == 0 {
 		return nil
 	}
@@ -906,17 +1108,17 @@ func (s *shellstate) completeCd(args []string) []string {
 	return props
 }
 
-func completeFiles(candidate string, files []os.FileInfo, onlyDirs, onlyFiles bool) []string {
+func completeFiles(candidate string, files []os.FileInfo, o only) []string {
 	var props []string
 
-	if onlyDirs {
+	if o == onlyDirs {
 		linq.From(files).
 			WhereT(func(info os.FileInfo) bool {
 				return info.IsDir()
 			}).
 			SelectT(func(info os.FileInfo) string { return info.Name() + "/" }).
 			ToSlice(&props)
-	} else if onlyFiles {
+	} else if o == onlyFiles {
 		linq.From(files).
 			WhereT(func(info os.FileInfo) bool { return info.Mode().IsRegular() }).
 			SelectT(func(info os.FileInfo) string { return info.Name() }).

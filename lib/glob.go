@@ -12,7 +12,7 @@ import (
 
 var magicChars = `*?[`
 
-func hasMeta(path string) bool {
+func HasMeta(path string) bool {
 	return strings.ContainsAny(path, magicChars)
 }
 
@@ -105,7 +105,7 @@ func glob(wd, dir, pattern string, matches []string, readDir readDirNamesFunc) (
 }
 
 func Glob(wd, pattern string, readDir readDirNamesFunc, lstat lStatFunc) (matches []string, err error) {
-	if !hasMeta(pattern) {
+	if !HasMeta(pattern) {
 		if _, err = lstat(join(wd, pattern)); err != nil {
 			return nil, nil
 		}
@@ -115,7 +115,7 @@ func Glob(wd, pattern string, readDir readDirNamesFunc, lstat lStatFunc) (matche
 	dir, file := filepath.Split(pattern)
 	dir = cleanGlobPath(dir)
 
-	if !hasMeta(dir) {
+	if !HasMeta(dir) {
 		return glob(wd, dir, file, nil, readDir)
 	}
 	if dir == pattern {
