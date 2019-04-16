@@ -13,12 +13,12 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
-  digest = "1:e4c72127d910a96daf869a44f3dd563b86dbe6931a172863a0e99c5ff04b59e4"
+  digest = "1:fd61cf4ae1953d55df708acb6b91492d538f49c305b364a014049914495db426"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   pruneopts = "UT"
-  revision = "dae0fa8d5b0c810a8ab733fbd5510c7cae84eca4"
-  version = "v1.4.0"
+  revision = "8bdbc7bcc01dcbb8ec23dc8a28e332258d25251f"
+  version = "v1.4.1"
 
 [[projects]]
   digest = "1:e2921241c77283579f383d04139a68aaca100668a26de5e1bc56d29d896ee304"
@@ -212,7 +212,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:cded54cacfb6fdc86b916031e4113cbc50dfb55e92535651733604f1e3a8ce59"
+  digest = "1:010eddbe5d1da9cbe074d721ff874862cf5d8be2069107e41915d50a0d2936ef"
   name = "github.com/hashicorp/vault"
   packages = [
     "api",
@@ -224,8 +224,8 @@
     "helper/strutil",
   ]
   pruneopts = "UT"
-  revision = "36aa8c8dd1936e10ebd7a4c1d412ae0e6f7900bd"
-  version = "v1.1.0"
+  revision = "a3dcd63451cf6da1d04928b601bbe9748d53842e"
+  version = "v1.1.1"
 
 [[projects]]
   branch = "master"
@@ -344,15 +344,15 @@
   revision = "6f820f8f90ce9482ffbd40bb15f9ea9932f4942d"
 
 [[projects]]
-  digest = "1:d886a3c32c8c1a770d07e36340f061d3afc948d065ffc3c9a19b01b34d4f0b65"
+  digest = "1:cf9272ab0a637cb1ffa40e2b6220108d7016a36b3eb357e4b57aacb7a8f725c0"
   name = "github.com/pierrec/lz4"
   packages = [
     ".",
     "internal/xxh32",
   ]
   pruneopts = "UT"
-  revision = "315a67e90e415bcdaff33057da191569bf4d8479"
-  version = "v2.1.1"
+  revision = "9419d2361c8ae111073ffe3337ecc364fb590921"
+  version = "v2.1.2"
 
 [[projects]]
   digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
@@ -478,7 +478,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d57851d164a897182cfb8f075eb2f07067718149c8362f942db839dcea2b967e"
+  digest = "1:e06587ae8f718230401e544795b1c3947fa036ebb738d99420beeb1559ce8700"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -492,11 +492,11 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "a5d413f7728c81fb97d96a2b722368945f651e78"
+  revision = "88737f569e3a9c7ab309cdc09a07fe7fc87233c3"
 
 [[projects]]
   branch = "master"
-  digest = "1:c8879109b3d04b0a15c587821781276273901bcb71da902757eac904b271f672"
+  digest = "1:360df043cc05ddaab708d78bcf7d7195dc2a24dfca40b3fdf5ed83f4060f5204"
   name = "golang.org/x/net"
   packages = [
     "http/httpguts",
@@ -505,7 +505,7 @@
     "idna",
   ]
   pruneopts = "UT"
-  revision = "63eda1eb0650888965ead1296efd04d0b2b61128"
+  revision = "1da14a5a36f220ea3f03470682b737b1dfd5de22"
 
 [[projects]]
   branch = "master"
@@ -513,11 +513,11 @@
   name = "golang.org/x/sync"
   packages = ["errgroup"]
   pruneopts = "UT"
-  revision = "e225da77a7e68af35c70ccbf71af2b83e6acac3c"
+  revision = "56d357773e8497dfd526f0727e187720d1093757"
 
 [[projects]]
   branch = "master"
-  digest = "1:78ed3d0c6d5b4996ef2867e280f39ea7b44438558c6331721740ab9061db532c"
+  digest = "1:7d66cc475c1a5fdde28caa9d9cd08a0b9baf6c9f5eb49eec6963a77174893c7d"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -525,7 +525,7 @@
     "windows",
   ]
   pruneopts = "UT"
-  revision = "f49334f85ddcf0f08d7fb6dd7363e9e6d6b777eb"
+  revision = "12500544f89f9420afe9529ba8940bf72d294972"
 
 [[projects]]
   digest = "1:23c42b366ef158741f7229785fc19761de6372b89ab515cbe43e781056044a4c"
