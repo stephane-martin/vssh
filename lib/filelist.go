@@ -34,7 +34,7 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name() < dirs[j].Name() })
 	sort.Slice(regulars, func(i, j int) bool { return regulars[i].Name() < regulars[j].Name() })
-	sort.Slice(irregulars, func(i, j int) bool { return irregulars[i].Name() < regulars[j].Name() })
+	sort.Slice(irregulars, func(i, j int) bool { return irregulars[i].Name() < irregulars[j].Name() })
 
 	var allfiles Unixfiles = make([]Unixfile, 0, len(dirs)+len(regulars)+len(irregulars))
 	allfiles = append(allfiles, dirs...)
@@ -83,8 +83,10 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 	table.SetCell(row, 0, tview.NewTableCell("..").SetTextColor(tcell.ColorBlue))
 	row++
 	for _, d := range dirs {
-		c := tview.NewTableCell(d.paddedName(maxNameLength)).SetTextColor(tcell.ColorBlue)
-		if !strings.HasPrefix(d.Name(), ".") {
+		c := tview.NewTableCell(d.paddedName(maxNameLength))
+		if strings.HasPrefix(d.Name(), ".") {
+			c.SetTextColor(tcell.ColorBlue)
+		} else {
 			c.SetStyle(bold).SetTextColor(tcell.ColorBlue)
 		}
 		table.SetCell(row, 0, c)
@@ -104,8 +106,14 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 	}
 	for _, reg := range regulars {
 		c := tview.NewTableCell(reg.paddedName(maxNameLength))
-		if !strings.HasPrefix(reg.Name(), ".") {
-			c.SetStyle(bold)
+		color := tcell.ColorDefault
+		if (reg.Mode().Perm() & 0100) != 0 {
+			color = tcell.ColorGreen
+		}
+		if strings.HasPrefix(reg.Name(), ".") {
+			c.SetTextColor(color)
+		} else {
+			c.SetStyle(bold).SetTextColor(color)
 		}
 		table.SetCell(row, 0, c)
 		table.SetCell(row, 1, tview.NewTableCell(reg.paddedSize(maxSizeLength)))
@@ -172,8 +180,14 @@ func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {
 		}
 		if f.IsDir() {
 			name = aur.Blue(fmt.Sprintf(padfmt, f.Path+"/"))
+		} else if f.Mode().IsRegular() {
+			if (f.Mode().Perm() & 0100) != 0 {
+				name = aur.Green(fmt.Sprintf(padfmt, f.Path))
+			} else {
+				name = fmt.Sprintf(padfmt, f.Path)
+			}
 		} else {
-			name = fmt.Sprintf(padfmt, f.Path)
+			name = aur.Red(fmt.Sprintf(padfmt, f.Path))
 		}
 		if !strings.HasPrefix(f.Path, ".") {
 			name = aur.Bold(name)

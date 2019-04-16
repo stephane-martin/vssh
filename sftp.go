@@ -178,8 +178,16 @@ func sftpCommand() cli.Command {
 
 		L:
 			for {
-				prmpt := fmt.Sprintf("[%s] > ", state.RemoteWD)
-				l, err := line.Prompt(prmpt)
+				termWidth := state.width() - 1
+				shortLocalWD := shorten(state.LocalWD)
+				promptWidth := 11 + len(state.RemoteWD) + len(shortLocalWD)
+				moreSpaces := termWidth - promptWidth
+				if moreSpaces <= 1 {
+					moreSpaces = 1
+				}
+				spaces := strings.Repeat(" ", moreSpaces)
+				fmt.Printf("┌─ R=[%s]%sL=[%s]\n", aurora.Cyan(state.RemoteWD), spaces, aurora.Cyan(shortLocalWD))
+				l, err := line.Prompt("└╾ ")
 				if err == liner.ErrPromptAborted {
 					continue L
 				}

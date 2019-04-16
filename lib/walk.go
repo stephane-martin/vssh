@@ -31,6 +31,13 @@ func getWalkFunc(client *sftp.Client) walkFunc {
 	}
 }
 
+func Walk(client *sftp.Client, wd string, cb ListCallback, l *zap.SugaredLogger) error {
+	if client == nil {
+		return WalkLocal(wd, cb, l)
+	}
+	return WalkRemote(client, wd, cb, l)
+}
+
 func WalkLocal(wd string, cb ListCallback, l *zap.SugaredLogger) error {
 	return godirwalk.Walk(wd, &godirwalk.Options{
 		Callback: func(osPathname string, de *godirwalk.Dirent) error {
@@ -115,4 +122,11 @@ func FuzzyLocal(wd string, l *zap.SugaredLogger) ([]string, error) {
 
 func FuzzyRemote(client *sftp.Client, wd string, l *zap.SugaredLogger) ([]string, error) {
 	return fuzzy(client, wd, l)
+}
+
+func Fuzzy(client *sftp.Client, wd string, l *zap.SugaredLogger) ([]string, error) {
+	if client == nil {
+		return FuzzyLocal(wd, l)
+	}
+	return FuzzyRemote(client, wd, nil)
 }

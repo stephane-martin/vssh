@@ -71,6 +71,8 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"lls":       s.lls,
 		"ll":        s.ll,
 		"lll":       s.lll,
+		"llist":     s.llist,
+		"list":      s.list,
 		"cd":        s.cd,
 		"lcd":       s.lcd,
 		"edit":      s.edit,
@@ -159,6 +161,44 @@ func join(dname, fname string) string {
 		return filepath.Join(dname, fname) + "/"
 	}
 	return filepath.Join(dname, fname)
+}
+
+func _list(wd string, client *sftp.Client, flags *strset.Set) (string, error) {
+	showHidden := flags.Has("a")
+	var buf strings.Builder
+	cb := func(path, relName string, isdir bool) error {
+		isHidden := strings.HasPrefix(relName, ".")
+		if isHidden && isdir && !showHidden {
+			return filepath.SkipDir
+		}
+		if isHidden && !showHidden {
+			return nil
+		}
+		fmt.Fprint(&buf, relName)
+		if isdir {
+			buf.WriteRune('/')
+		}
+		fmt.Fprintln(&buf)
+		return nil
+	}
+	var err error
+	if client == nil {
+		err = lib.WalkLocal(wd, cb, nil)
+	} else {
+		err = lib.WalkRemote(client, wd, cb, nil)
+	}
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func (s *shellstate) list(args []string, flags *strset.Set) (string, error) {
+	return _list(s.RemoteWD, s.client, flags)
+}
+
+func (s *shellstate) llist(args []string, flags *strset.Set) (string, error) {
+	return _list(s.LocalWD, nil, flags)
 }
 
 func (s *shellstate) rename(args []string, flags *strset.Set) (string, error) {
@@ -559,20 +599,20 @@ func (s *shellstate) lcd(args []string, flags *strset.Set) (string, error) {
 		}
 		args = append(args, name)
 	}
-	d := join(s.LocalWD, args[0])
-	stats, err := os.Stat(d)
+	dirname := join(s.LocalWD, strings.TrimRight(args[0], "/"))
+	stats, err := os.Stat(dirname)
 	if err != nil {
 		return "", err
 	}
 	if !stats.IsDir() {
 		return "", errors.New("not a directory")
 	}
-	f, err := os.Open(d)
-	_ = f.Close()
+	f, err := os.Open(dirname)
 	if err != nil {
 		return "", err
 	}
-	s.LocalWD = d
+	_ = f.Close()
+	s.LocalWD = dirname
 	return "", nil
 }
 
@@ -583,20 +623,20 @@ func (s *shellstate) cd(args []string, flags *strset.Set) (string, error) {
 	if len(args) == 0 {
 		args = append(args, s.initRemoteWD)
 	}
-	d := join(s.RemoteWD, args[0])
-	stats, err := s.client.Stat(d)
+	dirname := join(s.RemoteWD, strings.TrimRight(args[0], "/"))
+	stats, err := s.client.Stat(dirname)
 	if err != nil {
 		return "", err
 	}
 	if !stats.IsDir() {
 		return "", errors.New("not a directory")
 	}
-	f, err := s.client.Open(d)
+	f, err := s.client.Open(dirname)
 	if err != nil {
 		return "", err
 	}
 	_ = f.Close()
-	s.RemoteWD = d
+	s.RemoteWD = dirname
 	return "", nil
 }
 
@@ -653,13 +693,22 @@ func (s *shellstate) ledit(args []string, flags *strset.Set) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	allmatches := strset.New()
 	if len(args) == 0 {
-		// TODO: fuzzy find
-		return "", errors.New("no file")
-	}
-	allmatches, err := findMatches(args, s.LocalWD, nil, onlyFiles)
-	if err != nil {
-		return "", err
+		files, err := lib.FuzzyLocal(s.LocalWD, nil)
+		if err != nil {
+			return "", err
+		}
+		if len(files) == 0 {
+			return "", nil
+		}
+		allmatches.Add(files...)
+	} else {
+		var err error
+		allmatches, err = findMatches(args, s.LocalWD, nil, onlyFiles)
+		if err != nil {
+			return "", err
+		}
 	}
 	if allmatches.Size() == 0 {
 		// TODO: create new file
@@ -700,6 +749,9 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 		files, err := lib.FuzzyRemote(s.client, s.RemoteWD, nil)
 		if err != nil {
 			return "", err
+		}
+		if len(files) == 0 {
+			return "", nil
 		}
 		allmatches.Add(files...)
 	} else {
@@ -853,11 +905,7 @@ func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Cl
 	files["."] = strset.New()
 
 	allmatches.Each(func(match string) bool {
-		relMatch, err := filepath.Rel(wd, match)
-		if err != nil {
-			return true
-		}
-
+		relMatch := rel(wd, match)
 		stats, err := stat(match)
 		if err != nil {
 			return true
@@ -1024,8 +1072,18 @@ func base(s string) string {
 	return s
 }
 
+func rel(base, fname string) string {
+	relName, err := filepath.Rel(base, fname)
+	if err != nil {
+		return fname
+	}
+	if strings.HasPrefix(relName, "..") {
+		return fname
+	}
+	return relName
+}
+
 func candidate(wd, input string) (cand, dirname, relDirname string) {
-	var err error
 	if input == "" {
 		return "", wd, ""
 	}
@@ -1036,14 +1094,7 @@ func candidate(wd, input string) (cand, dirname, relDirname string) {
 		cand = base(input)
 		dirname = filepath.Dir(join(wd, input))
 	}
-	relDirname = dirname
-	if !strings.HasPrefix(input, "/") {
-		relDirname, err = filepath.Rel(wd, dirname)
-		if err != nil {
-			relDirname = dirname
-		}
-	}
-	return cand, dirname, relDirname
+	return cand, dirname, rel(wd, dirname)
 }
 
 func (s *shellstate) completeLless(args []string) []string {
@@ -1152,4 +1203,24 @@ func completeFiles(candidate string, files []os.FileInfo, o only) []string {
 		return buf.String()
 	}).ToSlice(&props)
 	return props
+}
+
+func shorten(path string) string {
+	d, f := filepath.Split(path)
+	var buf strings.Builder
+	var slash bool
+	for _, c := range d {
+		switch c {
+		case '/':
+			buf.WriteRune('/')
+			slash = true
+		default:
+			if slash {
+				buf.WriteRune(c)
+			}
+			slash = false
+		}
+	}
+	buf.WriteString(f)
+	return buf.String()
 }
