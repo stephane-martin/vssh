@@ -134,6 +134,18 @@
   version = "v0.0.1"
 
 [[projects]]
+  digest = "1:aebccac5eae98c77bbdf314428fb06ec1c1b4bee91589c3624d7facba176b8a6"
+  name = "github.com/google/gops"
+  packages = [
+    "agent",
+    "internal",
+    "signal",
+  ]
+  pruneopts = "UT"
+  revision = "9fda3b87c7b32caeeb2974e7cc2e71e60a597fdf"
+  version = "v0.3.6"
+
+[[projects]]
   digest = "1:0ade334594e69404d80d9d323445d2297ff8161637f9b2d347cc6973d2d6f05b"
   name = "github.com/hashicorp/errwrap"
   packages = ["."]
@@ -214,6 +226,14 @@
   pruneopts = "UT"
   revision = "36aa8c8dd1936e10ebd7a4c1d412ae0e6f7900bd"
   version = "v1.1.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:f433da6fbabb0bd1bd730fd340782015c644123d02eb78c20c69ce03352daad1"
+  name = "github.com/kardianos/osext"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "2bc1f35cddc0cc527b4bc3dce8578fc2a6c11384"
 
 [[projects]]
   digest = "1:38d2e838817528fd7d1ccdf7fa6700ee0f1727b3c484d13cab54bfbdaab12b0e"
@@ -550,6 +570,7 @@
     "github.com/alecthomas/chroma/styles",
     "github.com/awnumar/memguard",
     "github.com/gdamore/tcell",
+    "github.com/google/gops/agent",
     "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
     "github.com/hashicorp/vault/helper/consts",

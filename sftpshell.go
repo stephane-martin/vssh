@@ -695,13 +695,18 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	allmatches := strset.New()
 	if len(args) == 0 {
-		// TODO: fuzzy find
-		return "", errors.New("no file")
-	}
-	allmatches, err := findMatches(args, s.RemoteWD, s.client, onlyFiles)
-	if err != nil {
-		return "", err
+		files, err := lib.FuzzyRemote(s.client, s.RemoteWD, nil)
+		if err != nil {
+			return "", err
+		}
+		allmatches.Add(files...)
+	} else {
+		allmatches, err = findMatches(args, s.RemoteWD, s.client, onlyFiles)
+		if err != nil {
+			return "", err
+		}
 	}
 	if allmatches.Size() == 0 {
 		// TODO: create new file
@@ -715,12 +720,12 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 	copyTemp := func(match string) error {
 		f, err := s.client.Open(match)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to open remote file: %s", err)
 		}
 		defer func() { _ = f.Close() }()
 		stats, err := f.Stat()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to stat remote file: %s", err)
 		}
 		if stats.IsDir() || !stats.Mode().IsRegular() {
 			return nil
@@ -728,29 +733,28 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 		// create a temp directory for each file to edit
 		t, err := ioutil.TempDir("", "vssh-shell-edit")
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to make temp directory %s: %s", t, err)
 		}
 		dest := join(t, filepath.Base(f.Name()))
 		destFile, err := os.Create(dest)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create local file %s: %s", dest, err)
 		}
 		defer func() { _ = destFile.Close() }()
 		_, err = io.Copy(destFile, f)
 		_ = destFile.Close()
 		if err != nil {
 			_ = os.RemoveAll(t)
-			return err
+			return fmt.Errorf("failed to copy remote file %s: %s", f.Name(), err)
 		}
 		err = os.Chmod(dest, stats.Mode().Perm()&0700)
 		if err != nil {
-			_ = os.RemoveAll(t)
-			return err
+			s.err(fmt.Sprintf("failed to chmod local copy %s: %s", dest, err))
 		}
 		h, err := hashLocalFile(dest)
 		if err != nil {
 			_ = os.RemoveAll(t)
-			return err
+			return fmt.Errorf("failed to hash local copy %s: %s", dest, err)
 		}
 		tempFiles[match] = dest
 		initialHashes[match] = h
@@ -769,9 +773,10 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 	}
 	tempFilesList := make([]string, 0, len(tempFiles))
 	for _, tempFilename := range tempFiles {
-		tempFilesList = append(tempFilesList, tempFilename)
+		fname := tempFilename
+		tempFilesList = append(tempFilesList, fname)
 		defer func() {
-			_ = os.RemoveAll(filepath.Dir(tempFilename))
+			_ = os.RemoveAll(filepath.Dir(fname))
 		}()
 	}
 
@@ -810,6 +815,8 @@ func (s *shellstate) edit(args []string, flags *strset.Set) (string, error) {
 			err := upload(remoteFilename, tempFilename)
 			if err != nil {
 				s.err(fmt.Sprintf("%s: %s", remoteFilename, err))
+			} else {
+				s.info(fmt.Sprintf("modified: %s", remoteFilename))
 			}
 		}
 

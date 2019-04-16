@@ -1,9 +1,10 @@
 package main
 
 import (
+	"os"
+
 	"github.com/awnumar/memguard"
 	"github.com/urfave/cli"
-	"os"
 )
 
 // version stores the current version number of vssh. It it set by the Makefile.
@@ -19,6 +20,8 @@ func main() {
 			os.Exit(code)
 		}
 	}
+	startAgent()
 	_ = app.Run(os.Args)
+	stopAgent()
 	cli.OsExiter(0)
 }

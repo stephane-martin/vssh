@@ -62,7 +62,6 @@ func sftpCommand() cli.Command {
 					e = cli.NewExitError(e.Error(), 1)
 				}
 			}()
-
 			vaultParams := getVaultParams(c)
 			if vaultParams.SSHMount == "" {
 				return errors.New("empty SSH mount point")
