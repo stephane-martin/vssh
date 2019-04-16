@@ -2,37 +2,10 @@ package lib
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"time"
 
 	"github.com/ahmetb/go-linq"
 )
-
-type Stater interface {
-	io.Reader
-	Stat() (os.FileInfo, error)
-}
-
-type ReaderFileStater struct {
-	io.Reader
-	Name string
-}
-
-func (f ReaderFileStater) Stat() (os.FileInfo, error) {
-	return fileStat{name: f.Name}, nil
-}
-
-type fileStat struct {
-	name string
-}
-
-func (fs fileStat) Size() int64        { return 0 }
-func (fs fileStat) Mode() os.FileMode  { return 0 }
-func (fs fileStat) ModTime() time.Time { return time.Now() }
-func (fs fileStat) Sys() interface{}   { return nil }
-func (fs fileStat) Name() string       { return fs.name }
-func (fs fileStat) IsDir() bool        { return false }
 
 type SelectedFile struct {
 	Name string

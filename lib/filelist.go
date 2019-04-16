@@ -202,19 +202,9 @@ func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {
 	}
 }
 
-func ShowFile(fname string, f Stater, external bool) error {
-	stats, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	if stats.IsDir() {
-		return fmt.Errorf("is a directory: %s", fname)
-	}
-	if !stats.Mode().IsRegular() {
-		return fmt.Errorf("not a regular file: %s", fname)
-	}
+func ShowFile(fname string, content []byte, external bool) error {
 	if !external {
-		return showFileInternal(fname, f)
+		return showFileInternal(fname, content)
 	}
 	pager := os.Getenv("PAGER")
 	if pager == "" {
@@ -222,10 +212,10 @@ func ShowFile(fname string, f Stater, external bool) error {
 	}
 	p, err := exec.LookPath(pager)
 	if err != nil {
-		return showFileInternal(fname, f)
+		return showFileInternal(fname, content)
 	}
 	var buf bytes.Buffer
-	err = Colorize(fname, f, &buf)
+	err = Colorize(fname, content, &buf)
 	if err != nil {
 		return err
 	}
@@ -235,12 +225,12 @@ func ShowFile(fname string, f Stater, external bool) error {
 	c.Stderr = os.Stderr
 	err = c.Start()
 	if err != nil {
-		return showFileInternal(fname, f)
+		return showFileInternal(fname, content)
 	}
 	return c.Wait()
 }
 
-func showFileInternal(fname string, f io.Reader) error {
+func showFileInternal(fname string, content []byte) error {
 	app := tview.NewApplication()
 	app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyCtrlC {
@@ -262,7 +252,7 @@ func showFileInternal(fname string, f io.Reader) error {
 		return event
 	})
 	box.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(" " + fname + " ")
-	err := Colorize(fname, f, box)
+	err := Colorize(fname, content, box)
 	if err != nil {
 		return err
 	}

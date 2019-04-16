@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -286,7 +287,11 @@ func sftpCommand() cli.Command {
 						if isDir {
 							return errors.New("remote target is a directory")
 						}
-						return lib.ShowFile(name, lib.ReaderFileStater{Reader: content, Name: name}, c.GlobalBool("pager"))
+						b, err := ioutil.ReadAll(content)
+						if err != nil {
+							return err
+						}
+						return lib.ShowFile(name, b, c.GlobalBool("pager"))
 					}
 					return lib.SFTPGet(ctx, []string{target}, sshParams, privkey, signed, cb, logger)
 				},

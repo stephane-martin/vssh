@@ -369,8 +369,12 @@ func (s *shellstate) less(args []string, flags *strset.Set) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }()
-	return "", lib.ShowFile(fname, f, s.externalPager)
+	content, err := ioutil.ReadAll(f)
+	_ = f.Close()
+	if err != nil {
+		return "", err
+	}
+	return "", lib.ShowFile(fname, content, s.externalPager)
 }
 
 func (s *shellstate) lless(args []string, flags *strset.Set) (string, error) {
@@ -378,12 +382,11 @@ func (s *shellstate) lless(args []string, flags *strset.Set) (string, error) {
 		return "", errors.New("less takes one argument")
 	}
 	fname := join(s.LocalWD, args[0])
-	f, err := os.Open(fname)
+	content, err := ioutil.ReadFile(fname)
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = f.Close() }()
-	return "", lib.ShowFile(fname, f, s.externalPager)
+	return "", lib.ShowFile(fname, content, s.externalPager)
 }
 
 func (s *shellstate) get(args []string, flags *strset.Set) (string, error) {

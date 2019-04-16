@@ -3,7 +3,6 @@ package lib
 import (
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,21 +13,19 @@ import (
 	"github.com/rivo/tview"
 )
 
-func Colorize(name string, text io.Reader, out io.Writer) error {
+func Colorize(name string, content []byte, out io.Writer) error {
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext == ".pdf" {
-		return PDFToText(text, out)
+		return PDFToText(content, out)
+	} else if ext == ".docx" {
+		return ConvertDocx(content, out)
 	}
-	t, err := ioutil.ReadAll(text)
-	if err != nil {
-		return err
-	}
-	if IsBinary(t) {
+	if IsBinary(content) {
 		return errors.New("looks like binary")
 	}
 	lexer := lexers.Match(filepath.Base(name))
 	if lexer == nil {
-		_, err := out.Write(t)
+		_, err := out.Write(content)
 		return err
 	}
 	styleName := os.Getenv("VSSH_THEME")
@@ -43,7 +40,7 @@ func Colorize(name string, text io.Reader, out io.Writer) error {
 	if formatter == nil {
 		return errors.New("formatter not found")
 	}
-	iterator, err := lexer.Tokenise(nil, string(t))
+	iterator, err := lexer.Tokenise(nil, string(content))
 	if err != nil {
 		return err
 	}

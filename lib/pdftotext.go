@@ -7,7 +7,7 @@ import (
 	"os/exec"
 )
 
-func PDFToText(content io.Reader, out io.Writer) error {
+func PDFToText(content []byte, out io.Writer) error {
 	p, err := exec.LookPath("pdftotext")
 	if err != nil {
 		return err
@@ -21,7 +21,7 @@ func PDFToText(content io.Reader, out io.Writer) error {
 		_ = temp.Close()
 		_ = os.Remove(path)
 	}()
-	_, err = io.Copy(temp, content)
+	_, err = temp.Write(content)
 	if err != nil {
 		return err
 	}

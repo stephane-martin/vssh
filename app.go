@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io/ioutil"
 	"path/filepath"
 
 	"github.com/stephane-martin/vssh/lib"
@@ -55,12 +55,12 @@ func App() *cli.App {
 				if len(args) != 1 {
 					return errors.New("less takes one argument")
 				}
-				f, err := os.Open(args[0])
+				fname := args[0]
+				content, err := ioutil.ReadFile(fname)
 				if err != nil {
 					return err
 				}
-				defer f.Close()
-				return lib.ShowFile(args[0], f, c.GlobalBool("pager"))
+				return lib.ShowFile(args[0], content, c.GlobalBool("pager"))
 			},
 		},
 	}
