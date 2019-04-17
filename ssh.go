@@ -8,7 +8,6 @@ import (
 	"strings"
 	"syscall"
 
-	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
@@ -103,7 +102,7 @@ func sshAction(c *cli.Context) (e error) {
 		Upcase:   c.Bool("upcase"),
 	}
 
-	logger, err := vexec.Logger(params.LogLevel)
+	logger, err := Logger(params.LogLevel)
 	if err != nil {
 		return err
 	}

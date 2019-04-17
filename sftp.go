@@ -18,7 +18,6 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/mitchellh/go-homedir"
 	"github.com/peterh/liner"
-	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
@@ -69,7 +68,7 @@ func sftpCommand() cli.Command {
 				LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 			}
 
-			logger, err := vexec.Logger(params.LogLevel)
+			logger, err := Logger(params.LogLevel)
 			if err != nil {
 				return err
 			}
@@ -264,7 +263,7 @@ func sftpCommand() cli.Command {
 						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 					}
 
-					logger, err := vexec.Logger(params.LogLevel)
+					logger, err := Logger(params.LogLevel)
 					if err != nil {
 						return err
 					}
@@ -345,7 +344,7 @@ func sftpCommand() cli.Command {
 						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 					}
 
-					logger, err := vexec.Logger(params.LogLevel)
+					logger, err := Logger(params.LogLevel)
 					if err != nil {
 						return err
 					}

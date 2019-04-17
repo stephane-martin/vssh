@@ -15,7 +15,6 @@ import (
 	"github.com/ktr0731/go-fuzzyfinder"
 	"golang.org/x/crypto/ssh"
 
-	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
@@ -113,7 +112,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 		}
 
-		logger, err := vexec.Logger(params.LogLevel)
+		logger, err := Logger(params.LogLevel)
 		if err != nil {
 			return err
 		}

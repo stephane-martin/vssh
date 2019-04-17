@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 
-	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 )
@@ -91,7 +90,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 		}
 
-		logger, err := vexec.Logger(params.LogLevel)
+		logger, err := Logger(params.LogLevel)
 		if err != nil {
 			return err
 		}
