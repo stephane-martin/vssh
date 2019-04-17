@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/awnumar/memguard"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/ssh"
 
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
@@ -33,7 +33,7 @@ func scpPutCommand() cli.Command {
 				Value: ".",
 			},
 		},
-		Action: wrapPut(lib.ScpPut),
+		Action: wrapPut(lib.ScpPutAuth),
 	}
 }
 
@@ -52,7 +52,7 @@ func sftpPutCommand() cli.Command {
 				Value: ".",
 			},
 		},
-		Action: wrapPut(lib.SFTPPut),
+		Action: wrapPut(lib.SFTPPutAuth),
 	}
 }
 
@@ -67,7 +67,7 @@ func filterOutEmptyStrings(a []string) []string {
 	return b
 }
 
-type putFunc func(context.Context, []lib.Source, string, lib.SSHParams, *memguard.LockedBuffer, *memguard.LockedBuffer, *zap.SugaredLogger) error
+type putFunc func(context.Context, []lib.Source, string, lib.SSHParams, []ssh.AuthMethod, *zap.SugaredLogger) error
 
 type entry struct {
 	path  string
@@ -105,9 +105,23 @@ func wrapPut(f putFunc) cli.ActionFunc {
 		if err != nil {
 			return err
 		}
-		_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+
+		_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 		if err != nil {
 			return err
+		}
+
+		var methods []ssh.AuthMethod
+		for _, credential := range credentials {
+			m, err := credential.AuthMethod()
+			if err == nil {
+				methods = append(methods, m)
+			} else {
+				logger.Errorw("failed to use credentials", "error", err)
+			}
+		}
+		if len(methods) == 0 {
+			return errors.New("no usable credentials")
 		}
 
 		sourcesNames := filterOutEmptyStrings(c.StringSlice("source"))
@@ -139,6 +153,6 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			dest = "."
 		}
 
-		return f(ctx, sources, dest, sshParams, privkey, signed, logger)
+		return f(ctx, sources, dest, sshParams, methods, logger)
 	}
 }

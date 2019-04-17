@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"runtime"
 	"strings"
 
@@ -20,7 +19,6 @@ import (
 
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/vault/api"
-	"github.com/mitchellh/go-homedir"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
@@ -135,20 +133,6 @@ func SerializePublicKey(public *PublicKey) (*memguard.LockedBuffer, error) {
 	return res, nil
 }
 
-func ReadPrivateKey(ctx context.Context, path string, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
-	if path == "" && vpath == "" {
-		p, err := homedir.Expand("~/.ssh/id_rsa")
-		if err != nil {
-			return nil, err
-		}
-		path = p
-	}
-	if path != "" {
-		return ReadPrivateKeyFromFileSystem(path)
-	}
-	return ReadPrivateKeyFromVault(ctx, vpath, client, l)
-}
-
 func ReadPrivateKeyFromVault(ctx context.Context, vpath string, client *api.Client, l *zap.SugaredLogger) (*memguard.LockedBuffer, error) {
 	m, err := GetSecretsFromVault(ctx, client, []string{vpath}, false, false, l)
 	if err != nil {
@@ -167,15 +151,24 @@ func ReadPrivateKeyFromVault(ctx context.Context, vpath string, client *api.Clie
 	return nil, errors.New("private key not found in Vault")
 }
 
-func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
-	infos, err := os.Stat(path)
+func ReadCertificateFromFileSystem(path string) (*memguard.LockedBuffer, error) {
+	certb, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read certificate file: %s", err)
 	}
-	if !infos.Mode().IsRegular() {
-		return nil, errors.New("privkey is not a regular file")
+	if len(certb) == 0 {
+		return nil, errors.New("empty certificate file")
 	}
+	certb2 := append(bytes.Trim(certb, "\n"), '\n')
+	cert, err := memguard.NewImmutableFromBytes(certb2)
+	memguard.WipeBytes(certb)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create memguard for certificate: %s", err)
+	}
+	return cert, nil
+}
 
+func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 	privkeyb, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key file: %s", err)

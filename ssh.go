@@ -11,6 +11,7 @@ import (
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
+	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -96,14 +97,6 @@ func sshAction(c *cli.Context) (e error) {
 		}
 	}()
 
-	vaultParams := getVaultParams(c)
-	if vaultParams.SSHMount == "" {
-		return errors.New("empty SSH mount point")
-	}
-	if vaultParams.SSHRole == "" {
-		return errors.New("empty SSH role")
-	}
-
 	params := lib.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 		Prefix:   c.Bool("prefix"),
@@ -124,20 +117,39 @@ func sshAction(c *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-	client, privkey, signed, pubkey, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+
+	client, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
+	}
+
+	var methods []ssh.AuthMethod
+	for _, credential := range credentials {
+		m, err := credential.AuthMethod()
+		if err == nil {
+			methods = append(methods, m)
+		} else {
+			logger.Errorw("failed to use credentials", "error", err)
+		}
+	}
+	if len(methods) == 0 {
+		return errors.New("no usable credentials")
 	}
 
 	secretPaths := c.StringSlice("secret")
 	var secrets map[string]string
 	if len(secretPaths) > 0 {
-		res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
-		if err != nil {
-			return err
+		if client != nil {
+			res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
+			if err != nil {
+				return err
+			}
+			secrets = res
+		} else {
+			logger.Warnw("can't read secrets from vault: no vault client")
 		}
-		secrets = res
 	}
 
-	return lib.Connect(ctx, sshParams, privkey, signed, pubkey, secrets, logger)
+	// TODO: restore native connext
+	return lib.GoConnectAuth(ctx, sshParams, methods, secrets, logger)
 }

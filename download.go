@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/awnumar/memguard"
 	"github.com/ktr0731/go-fuzzyfinder"
+	"golang.org/x/crypto/ssh"
 
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
@@ -67,7 +67,7 @@ func sftpGetCommand() cli.Command {
 	}
 }
 
-type getFunc func(context.Context, []string, lib.SSHParams, *memguard.LockedBuffer, *memguard.LockedBuffer, lib.Callback, *zap.SugaredLogger) error
+type getFunc func(context.Context, []string, lib.SSHParams, []ssh.AuthMethod, lib.Callback, *zap.SugaredLogger) error
 
 func wrapGet(sftp bool) cli.ActionFunc {
 	return func(c *cli.Context) (e error) {
@@ -127,14 +127,29 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		if err != nil {
 			return err
 		}
-		_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
-		if err != nil {
-			return err
-		}
 
 		if len(sources) == 0 {
 			var paths []entry
-			err := lib.SFTPList(ctx, sshParams, privkey, signed, logger, func(path, rel string, isdir bool) error {
+
+			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+			if err != nil {
+				return err
+			}
+
+			var methods []ssh.AuthMethod
+			for _, credential := range credentials {
+				m, err := credential.AuthMethod()
+				if err == nil {
+					methods = append(methods, m)
+				} else {
+					logger.Errorw("failed to use credentials", "error", err)
+				}
+			}
+			if len(methods) == 0 {
+				return errors.New("no usable credentials")
+			}
+
+			err = lib.SFTPListAuth(ctx, sshParams, methods, logger, func(path, rel string, isdir bool) error {
 				if strings.HasPrefix(rel, ".") {
 					if isdir {
 						return filepath.SkipDir
@@ -160,25 +175,38 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			if len(sources) == 0 {
 				return errors.New("you must specify the targets")
 			}
-			_, privkey, signed, _, err = getCredentials(ctx, c, sshParams.LoginName, logger)
-			if err != nil {
-				return err
+		}
+
+		_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+		if err != nil {
+			return err
+		}
+
+		var methods []ssh.AuthMethod
+		for _, credential := range credentials {
+			m, err := credential.AuthMethod()
+			if err == nil {
+				methods = append(methods, m)
+			} else {
+				logger.Errorw("failed to use credentials", "error", err)
 			}
+		}
+		if len(methods) == 0 {
+			return errors.New("no usable credentials")
 		}
 
 		var f getFunc
 		if sftp {
-			f = lib.SFTPGet
+			f = lib.SFTPGetAuth
 		} else {
-			f = lib.ScpGet
+			f = lib.ScpGetAuth
 		}
 
 		return f(
 			ctx,
 			sources,
 			sshParams,
-			privkey,
-			signed,
+			methods,
 			makeCB(
 				dest,
 				c.Bool("preserve"),

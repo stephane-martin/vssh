@@ -24,17 +24,12 @@ import (
 // Callback is a function type that is used by ScpGet to return the remote SSH directories and files.
 type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
 
-func SFTPClient(params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) (*sftp.Client, error) {
-	a, err := makeAuthCertificate(privkey, cert)
-	if err != nil {
-		return nil, err
-	}
-
+func SFTPClient(params SSHParams, methods []ssh.AuthMethod, l *zap.SugaredLogger) (*sftp.Client, error) {
 	cfg := gssh.Config{
 		User: params.LoginName,
 		Host: params.Host,
 		Port: params.Port,
-		Auth: []ssh.AuthMethod{a},
+		Auth: methods,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {

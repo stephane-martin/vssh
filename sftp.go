@@ -21,6 +21,7 @@ import (
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
+	"golang.org/x/crypto/ssh"
 )
 
 func sftpCommand() cli.Command {
@@ -63,13 +64,6 @@ func sftpCommand() cli.Command {
 					e = cli.NewExitError(e.Error(), 1)
 				}
 			}()
-			vaultParams := getVaultParams(c)
-			if vaultParams.SSHMount == "" {
-				return errors.New("empty SSH mount point")
-			}
-			if vaultParams.SSHRole == "" {
-				return errors.New("empty SSH role")
-			}
 
 			params := lib.Params{
 				LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
@@ -91,11 +85,26 @@ func sftpCommand() cli.Command {
 				return err
 			}
 
-			_, privkey, signed, _, err := getCredentials(context.Background(), c, sshParams.LoginName, logger)
+			// TODO: get rid of context.Background
+			_, credentials, err := getCredentials(context.Background(), c, sshParams.LoginName, logger)
 			if err != nil {
 				return err
 			}
-			client, err := lib.SFTPClient(sshParams, privkey, signed, logger)
+
+			var methods []ssh.AuthMethod
+			for _, credential := range credentials {
+				m, err := credential.AuthMethod()
+				if err == nil {
+					methods = append(methods, m)
+				} else {
+					logger.Errorw("failed to use credentials", "error", err)
+				}
+			}
+			if len(methods) == 0 {
+				return errors.New("no usable credentials")
+			}
+
+			client, err := lib.SFTPClient(sshParams, methods, logger)
 			if err != nil {
 				return err
 			}
@@ -251,14 +260,6 @@ func sftpCommand() cli.Command {
 						}
 					}()
 
-					vaultParams := getVaultParams(c)
-					if vaultParams.SSHMount == "" {
-						return errors.New("empty SSH mount point")
-					}
-					if vaultParams.SSHRole == "" {
-						return errors.New("empty SSH role")
-					}
-
 					params := lib.Params{
 						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 					}
@@ -279,10 +280,24 @@ func sftpCommand() cli.Command {
 						return err
 					}
 
-					_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+					_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 					if err != nil {
 						return err
 					}
+
+					var methods []ssh.AuthMethod
+					for _, credential := range credentials {
+						m, err := credential.AuthMethod()
+						if err == nil {
+							methods = append(methods, m)
+						} else {
+							logger.Errorw("failed to use credentials", "error", err)
+						}
+					}
+					if len(methods) == 0 {
+						return errors.New("no usable credentials")
+					}
+
 					cb := func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error {
 						if isDir {
 							return errors.New("remote target is a directory")
@@ -293,7 +308,7 @@ func sftpCommand() cli.Command {
 						}
 						return lib.ShowFile(name, b, c.GlobalBool("pager"))
 					}
-					return lib.SFTPGet(ctx, []string{target}, sshParams, privkey, signed, cb, logger)
+					return lib.SFTPGetAuth(ctx, []string{target}, sshParams, methods, cb, logger)
 				},
 			},
 			{
@@ -326,14 +341,6 @@ func sftpCommand() cli.Command {
 						}
 					}()
 
-					vaultParams := getVaultParams(c)
-					if vaultParams.SSHMount == "" {
-						return errors.New("empty SSH mount point")
-					}
-					if vaultParams.SSHRole == "" {
-						return errors.New("empty SSH role")
-					}
-
 					params := lib.Params{
 						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
 					}
@@ -354,14 +361,27 @@ func sftpCommand() cli.Command {
 						return err
 					}
 
-					_, privkey, signed, _, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+					_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 					if err != nil {
 						return err
 					}
 
+					var methods []ssh.AuthMethod
+					for _, credential := range credentials {
+						m, err := credential.AuthMethod()
+						if err == nil {
+							methods = append(methods, m)
+						} else {
+							logger.Errorw("failed to use credentials", "error", err)
+						}
+					}
+					if len(methods) == 0 {
+						return errors.New("no usable credentials")
+					}
+
 					hidden := c.Bool("hidden")
 					aur := aurora.NewAurora(c.Bool("color"))
-					return lib.SFTPList(ctx, sshParams, privkey, signed, logger, func(path, relname string, isdir bool) error {
+					return lib.SFTPListAuth(ctx, sshParams, methods, logger, func(path, relname string, isdir bool) error {
 						if isdir {
 							if strings.HasPrefix(filepath.Base(path), ".") {
 								if hidden {

@@ -79,6 +79,7 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"ledit":     s.ledit,
 		"exit":      s.exit,
 		"logout":    s.exit,
+		"q":         s.exit,
 		":q":        s.exit,
 		"pwd":       s.pwd,
 		"lpwd":      s.lpwd,
