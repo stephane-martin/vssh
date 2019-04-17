@@ -12,6 +12,7 @@ func Logger(level string) (*zap.SugaredLogger, error) {
 	zcfg.DisableCaller = true
 	zcfg.DisableStacktrace = true
 	zcfg.Sampling = nil
+	zcfg.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	//zcfg := zap.NewProductionConfig()
 	//zcfg.Encoding = "console"
 	//zcfg := zap.NewDevelopmentConfig()

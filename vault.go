@@ -166,14 +166,14 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		} else if err == context.Canceled {
 			return nil, nil, err
 		} else {
-			l.Errorw("failed to read private key from vault", "error", err)
+			l.Warnw("failed to read private key from vault", "error", err)
 		}
 	}
 	var pubkeyVault *lib.PublicKey
 	if privkeyVault != nil {
 		pubkey, err := lib.DerivePublicKey(privkeyVault)
 		if err != nil {
-			l.Infow("failed to derive public key from vault private key", "error", err)
+			l.Warnw("failed to derive public key from vault private key", "error", err)
 		} else {
 			pubkeyVault = pubkey
 		}
@@ -187,7 +187,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		} else if err == context.Canceled {
 			return nil, nil, err
 		} else {
-			l.Errorw("failed to sign vault private key", "error", err)
+			l.Warnw("failed to sign vault private key", "error", err)
 		}
 	}
 	var certificatePKFS *memguard.LockedBuffer
@@ -198,7 +198,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		} else if err == context.Canceled {
 			return nil, nil, err
 		} else {
-			l.Errorw("failed to sign filesystem private key", "error", err)
+			l.Warnw("failed to sign filesystem private key", "error", err)
 		}
 	}
 
