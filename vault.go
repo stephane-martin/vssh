@@ -242,7 +242,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		l.Infow("enabled: private key from filesystem, no certificate")
 	}
 	if c.GlobalBool("password") {
-		pass, err := lib.InputPassword("enter SSH password: ")
+		pass, err := lib.InputPassword("Enter SSH password")
 		if err != nil {
 			return nil, nil, err
 		}

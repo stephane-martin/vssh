@@ -15,7 +15,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/peterh/liner"
+	"github.com/gdamore/tcell"
+	"github.com/rivo/tview"
 
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/vault/api"
@@ -187,7 +188,7 @@ func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 		return nil, fmt.Errorf("error parsing private key: %s", err)
 	}
 	if needPass {
-		pass, err := InputPassword("enter the passphrase for the private key: ")
+		pass, err := InputPassword("Enter the passphrase for the private key")
 		if err != nil {
 			return nil, fmt.Errorf("failed to get passphrase: %s", err)
 		}
@@ -203,15 +204,32 @@ func ReadPrivateKeyFromFileSystem(path string) (*memguard.LockedBuffer, error) {
 
 func InputPassword(prompt string) (*memguard.LockedBuffer, error) {
 	defer runtime.GC()
-	line := liner.NewLiner()
-	line.SetCtrlCAborts(true)
-	pass, err := line.PasswordPrompt(prompt)
+	app := tview.NewApplication()
+
+	field := tview.NewInputField()
+	field.SetLabel("Password:").SetText("").SetFieldWidth(0).SetMaskCharacter('*')
+	field.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEscape {
+			field.SetText("")
+		}
+		app.Stop()
+	})
+
+	form := tview.NewForm()
+	form.SetFieldBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	form.SetFieldTextColor(tcell.ColorDarkRed)
+	form.SetBorder(true).SetTitle(" " + prompt + " ").SetTitleAlign(tview.AlignLeft)
+	form.AddFormItem(field)
+	err := app.SetRoot(form, true).Run()
 	if err != nil {
-		pass = ""
 		return nil, err
 	}
+	pass := field.GetText()
+
+	if len(pass) == 0 {
+		return nil, errors.New("empty password")
+	}
 	b, err := memguard.NewImmutableFromBytes([]byte(pass))
-	pass = ""
 	if err != nil {
 		return nil, err
 	}
