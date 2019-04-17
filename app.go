@@ -128,5 +128,10 @@ func GlobalFlags() []cli.Flag {
 			Usage:  "use external pager",
 			EnvVar: "VSSH_EXTERNAL_PAGER",
 		},
+		cli.BoolFlag{
+			Name:   "password",
+			Usage:  "enable SSH password authentication",
+			EnvVar: "VSSH_SSH_PASSWORD",
+		},
 	}
 }

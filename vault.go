@@ -67,29 +67,36 @@ type Credentials struct {
 	PrivateKey  *memguard.LockedBuffer
 	PublicKey   *lib.PublicKey
 	Certificate *memguard.LockedBuffer
+	Password    *memguard.LockedBuffer
 }
 
 func (c Credentials) AuthMethod() (ssh.AuthMethod, error) {
-	if c.Certificate == nil {
+	if c.PrivateKey != nil && c.Certificate != nil {
+		ce, err := gssh.ParseCertificate(c.Certificate.Buffer())
+		if err != nil {
+			return nil, err
+		}
+		s, err := ssh.ParsePrivateKey(c.PrivateKey.Buffer())
+		if err != nil {
+			return nil, err
+		}
+		signer, err := ssh.NewCertSigner(ce, s)
+		if err != nil {
+			return nil, err
+		}
+		return ssh.PublicKeys(signer), nil
+	}
+	if c.PrivateKey != nil && c.Certificate == nil {
 		s, err := ssh.ParsePrivateKey(c.PrivateKey.Buffer())
 		if err != nil {
 			return nil, err
 		}
 		return ssh.PublicKeys(s), nil
 	}
-	ce, err := gssh.ParseCertificate(c.Certificate.Buffer())
-	if err != nil {
-		return nil, err
+	if c.Password != nil {
+		return ssh.Password(string(c.Password.Buffer())), nil
 	}
-	s, err := ssh.ParsePrivateKey(c.PrivateKey.Buffer())
-	if err != nil {
-		return nil, err
-	}
-	signer, err := ssh.NewCertSigner(ce, s)
-	if err != nil {
-		return nil, err
-	}
-	return ssh.PublicKeys(signer), nil
+	return nil, errors.New("no credentials")
 }
 
 func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *zap.SugaredLogger) (*api.Client, []Credentials, error) {
@@ -232,7 +239,17 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 			PrivateKey: privkeyFS,
 			PublicKey:  pubkeyFS,
 		})
-		l.Infow("enabled private key from filesystem, no certificate")
+		l.Infow("enabled: private key from filesystem, no certificate")
+	}
+	if c.GlobalBool("password") {
+		pass, err := lib.InputPassword("enter SSH password: ")
+		if err != nil {
+			return nil, nil, err
+		}
+		credentials = append(credentials, Credentials{
+			Password: pass,
+		})
+		l.Infow("enabled: SSH password")
 	}
 	return vaultClient, credentials, nil
 }
