@@ -47,7 +47,7 @@ func sftpCommand() cli.Command {
 			var c CLIContext = cliContext{ctx: clictx}
 			if c.SSHHost() == "" {
 				var err error
-				c, err = Form(c)
+				c, err = Form(c, false)
 				if err != nil {
 					return err
 				}

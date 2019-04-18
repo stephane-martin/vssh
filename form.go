@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gdamore/tcell"
+	"github.com/mattn/go-shellwords"
 	"github.com/rivo/tview"
 )
 
@@ -26,7 +27,7 @@ func idx(m string) int {
 	return -1
 }
 
-func Form(c CLIContext) (CLIContext, error) {
+func Form(c CLIContext, sshOptions bool) (CLIContext, error) {
 	app := tview.NewApplication()
 
 	form := tview.NewForm()
@@ -35,6 +36,7 @@ func Form(c CLIContext) (CLIContext, error) {
 	form.SetTitle(" Enter connection parameters ")
 	form.SetButtonBackgroundColor(tcell.ColorDarkBlue)
 	form.SetButtonTextColor(tcell.ColorWhite)
+	form.SetCancelFunc(func() { app.Stop() })
 
 	addInputField := func(label, value string, fieldWidth int, accept func(textToCheck string, lastChar rune) bool) *tview.InputField {
 		field := tview.NewInputField().
@@ -90,10 +92,16 @@ func Form(c CLIContext) (CLIContext, error) {
 	ctx.sshHostField = addInputField("SSH host", c.SSHHost(), 40, nil)
 	ctx.sshPortField = addInputField("SSH port", fmt.Sprintf("%d", c.SSHPort()), 5, tview.InputFieldInteger)
 	ctx.sshLoginField = addInputField("SSH login", login, 40, nil)
+	if sshOptions {
+		ctx.remoteCommandField = addInputField("Remote command", "", 40, nil)
+	}
 	ctx.sshPKeyField = addInputField("SSH private key path", pkeyPath, 40, nil)
 	ctx.sshVPKeyField = addInputField("SSH private key path in Vault", c.VPrivateKey(), 40, nil)
 	ctx.sshPasswordField = addCheckBox("Use SSH password", c.SSHPassword())
 	ctx.insecureField = addCheckBox("Do not check host key", c.SSHInsecure())
+	if sshOptions {
+		ctx.forceTerminalField = addCheckBox("Force pseudo-terminal", false)
+	}
 	ctx.vaultURLField = addInputField("Vault URL", c.VaultAddress(), 40, nil)
 	ctx.vaultAuthMethodField = addDropDown("Vault authentication method", authMethods, c.VaultAuthMethod())
 	ctx.vaultAuthPathField = addInputField("Vault authentication path", c.VaultAuthPath(), 40, nil)
@@ -106,6 +114,33 @@ func Form(c CLIContext) (CLIContext, error) {
 	var confirm bool
 
 	form.AddButton("Confirm ✓", func() {
+		host := t(ctx.sshHostField.GetText())
+		if host == "" {
+			app.SetFocus(ctx.sshHostField)
+			return
+		}
+
+		if ctx.remoteCommandField != nil {
+			cmd := t(ctx.remoteCommandField.GetText())
+			if cmd != "" {
+				p := shellwords.NewParser()
+				_, err := p.Parse(cmd)
+				if err != nil {
+					app.SetFocus(ctx.remoteCommandField)
+					return
+				}
+				if p.Position != -1 {
+					app.SetFocus(ctx.remoteCommandField)
+					return
+				}
+			}
+		}
+		port := t(ctx.sshPortField.GetText())
+		if port == "" {
+			app.SetFocus(ctx.sshPortField)
+			return
+		}
+
 		confirm = true
 		app.Stop()
 	})
@@ -136,6 +171,8 @@ type formContext struct {
 	sshPKeyField         *tview.InputField
 	sshVPKeyField        *tview.InputField
 	insecureField        *tview.Checkbox
+	forceTerminalField   *tview.Checkbox
+	remoteCommandField   *tview.InputField
 	vaultURLField        *tview.InputField
 	vaultAuthMethodField *tview.DropDown
 	vaultAuthPathField   *tview.InputField
@@ -183,7 +220,22 @@ func (ctx *formContext) VaultSSHRole() string {
 }
 
 func (ctx *formContext) SSHCommand() []string {
-	return nil
+	if ctx.remoteCommandField == nil {
+		return nil
+	}
+	cmd := t(ctx.remoteCommandField.GetText())
+	if cmd == "" {
+		return nil
+	}
+	p := shellwords.NewParser()
+	args, err := p.Parse(cmd)
+	if err != nil {
+		return nil
+	}
+	if p.Position != -1 {
+		return nil
+	}
+	return args
 }
 
 func (ctx *formContext) SSHHost() string {
@@ -206,6 +258,13 @@ func (ctx *formContext) SSHPassword() bool {
 
 func (ctx *formContext) SSHInsecure() bool {
 	return ctx.insecureField.IsChecked()
+}
+
+func (ctx *formContext) ForceTerminal() bool {
+	if ctx.forceTerminalField != nil {
+		return ctx.forceTerminalField.IsChecked()
+	}
+	return false
 }
 
 func (ctx *formContext) PrivateKey() string {

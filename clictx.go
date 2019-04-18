@@ -19,6 +19,7 @@ type CLIContext interface {
 	SSHInsecure() bool
 	PrivateKey() string
 	VPrivateKey() string
+	ForceTerminal() bool
 }
 
 type cliContext struct {
@@ -93,4 +94,8 @@ func (c cliContext) PrivateKey() string {
 
 func (c cliContext) VPrivateKey() string {
 	return c.ctx.GlobalString("vprivkey")
+}
+
+func (c cliContext) ForceTerminal() bool {
+	return c.ctx.Bool("terminal")
 }

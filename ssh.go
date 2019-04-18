@@ -80,11 +80,17 @@ func sshAction(clictx *cli.Context) (e error) {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	if len(clictx.Args()) == 0 {
-		return errors.New("no host provided")
+	var c CLIContext = cliContext{ctx: clictx}
+	if c.SSHHost() == "" {
+		if c.SSHHost() == "" {
+			var err error
+			c, err = Form(c, true)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
-	c := cliContext{ctx: clictx}
 	sshParams, err := getSSHParams(c)
 	if err != nil {
 		return err
@@ -122,6 +128,6 @@ func sshAction(clictx *cli.Context) (e error) {
 		}
 	}
 
-	// TODO: restore native connext
-	return lib.GoConnectAuth(ctx, sshParams, clictx.Bool("terminal"), methods, secrets, logger)
+	// TODO: restore native connect
+	return lib.GoConnectAuth(ctx, sshParams, c.ForceTerminal(), methods, secrets, logger)
 }
