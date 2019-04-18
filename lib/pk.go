@@ -217,7 +217,7 @@ func InputPassword(prompt string) (*memguard.LockedBuffer, error) {
 
 	form := tview.NewForm()
 	form.SetFieldBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
-	form.SetFieldTextColor(tcell.ColorDarkRed)
+	form.SetFieldTextColor(tcell.ColorRed)
 	form.SetBorder(true).SetTitle(" " + prompt + " ").SetTitleAlign(tview.AlignLeft)
 	form.AddFormItem(field)
 	err := app.SetRoot(form, true).Run()

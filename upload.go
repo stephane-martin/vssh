@@ -75,7 +75,7 @@ type entry struct {
 }
 
 func wrapPut(f putFunc) cli.ActionFunc {
-	return func(c *cli.Context) (e error) {
+	return func(clictx *cli.Context) (e error) {
 		defer func() {
 			if e != nil {
 				e = cli.NewExitError(e.Error(), 1)
@@ -87,7 +87,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 		cancelOnSignal(cancel)
 
 		params := lib.Params{
-			LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+			LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 		}
 
 		logger, err := Logger(params.LogLevel)
@@ -96,10 +96,11 @@ func wrapPut(f putFunc) cli.ActionFunc {
 		}
 		defer func() { _ = logger.Sync() }()
 
-		args := c.Args()
-		if len(args) == 0 {
+		if len(clictx.Args()) == 0 {
 			return errors.New("no host provided")
 		}
+
+		c := cliContext{ctx: clictx}
 		sshParams, err := getSSHParams(c)
 		if err != nil {
 			return err
@@ -123,7 +124,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			return errors.New("no usable credentials")
 		}
 
-		sourcesNames := filterOutEmptyStrings(c.StringSlice("source"))
+		sourcesNames := filterOutEmptyStrings(clictx.StringSlice("source"))
 		if len(sourcesNames) == 0 {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -147,7 +148,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			sources = append(sources, s)
 		}
 
-		dest := strings.TrimSpace(c.String("destination"))
+		dest := strings.TrimSpace(clictx.String("destination"))
 		if dest == "" {
 			dest = "."
 		}

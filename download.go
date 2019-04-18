@@ -69,7 +69,7 @@ func sftpGetCommand() cli.Command {
 type getFunc func(context.Context, []string, lib.SSHParams, []ssh.AuthMethod, lib.Callback, *zap.SugaredLogger) error
 
 func wrapGet(sftp bool) cli.ActionFunc {
-	return func(c *cli.Context) (e error) {
+	return func(clictx *cli.Context) (e error) {
 		defer func() {
 			if e != nil {
 				e = cli.NewExitError(e.Error(), 1)
@@ -86,12 +86,12 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			}
 		}()
 
-		sources := filterOutEmptyStrings(c.StringSlice("target"))
+		sources := filterOutEmptyStrings(clictx.StringSlice("target"))
 		if len(sources) == 0 && !sftp {
 			return errors.New("you must specify the targets")
 		}
 
-		dest := strings.TrimSpace(c.String("destination"))
+		dest := strings.TrimSpace(clictx.String("destination"))
 		if dest == "" {
 			dest = "."
 		}
@@ -109,7 +109,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		}
 
 		params := lib.Params{
-			LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+			LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 		}
 
 		logger, err := Logger(params.LogLevel)
@@ -118,10 +118,10 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		}
 		defer func() { _ = logger.Sync() }()
 
-		args := c.Args()
-		if len(args) == 0 {
+		if len(clictx.Args()) == 0 {
 			return errors.New("no host provided")
 		}
+		c := cliContext{ctx: clictx}
 		sshParams, err := getSSHParams(c)
 		if err != nil {
 			return err
@@ -208,7 +208,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			methods,
 			makeCB(
 				dest,
-				c.Bool("preserve"),
+				clictx.Bool("preserve"),
 				destExists,
 				destIsDir,
 				logger,

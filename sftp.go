@@ -27,7 +27,7 @@ func sftpCommand() cli.Command {
 	return cli.Command{
 		Name:  "sftp",
 		Usage: "download/upload files with sftp protocol using Vault for authentication",
-		Action: func(c *cli.Context) (e error) {
+		Action: func(clictx *cli.Context) (e error) {
 			defer func() {
 				if e != nil {
 					e = cli.NewExitError(e.Error(), 1)
@@ -35,7 +35,7 @@ func sftpCommand() cli.Command {
 			}()
 
 			params := lib.Params{
-				LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+				LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 			}
 
 			logger, err := Logger(params.LogLevel)
@@ -44,11 +44,14 @@ func sftpCommand() cli.Command {
 			}
 			defer func() { _ = logger.Sync() }()
 
-			args := c.Args()
-			if len(args) == 0 {
-				return errors.New("no host provided")
+			var c CLIContext = cliContext{ctx: clictx}
+			if c.SSHHost() == "" {
+				var err error
+				c, err = Form(c)
+				if err != nil {
+					return err
+				}
 			}
-
 			sshParams, err := getSSHParams(c)
 			if err != nil {
 				return err
@@ -81,7 +84,7 @@ func sftpCommand() cli.Command {
 
 			state, err := newShellState(
 				client,
-				c.GlobalBool("pager"),
+				clictx.GlobalBool("pager"),
 				func(info string) {
 					fmt.Fprintln(os.Stderr, aurora.Blue("-> "+info))
 				},
@@ -207,14 +210,14 @@ func sftpCommand() cli.Command {
 					},
 				},
 				Usage: "show remote file",
-				Action: func(c *cli.Context) (e error) {
+				Action: func(clictx *cli.Context) (e error) {
 					defer func() {
 						if e != nil {
 							e = cli.NewExitError(e.Error(), 1)
 						}
 					}()
 
-					target := strings.TrimSpace(c.String("target"))
+					target := strings.TrimSpace(clictx.String("target"))
 					if target == "" {
 						return errors.New("target not specified")
 					}
@@ -230,7 +233,7 @@ func sftpCommand() cli.Command {
 					}()
 
 					params := lib.Params{
-						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+						LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 					}
 
 					logger, err := Logger(params.LogLevel)
@@ -239,8 +242,8 @@ func sftpCommand() cli.Command {
 					}
 					defer func() { _ = logger.Sync() }()
 
-					args := c.Args()
-					if len(args) == 0 {
+					c := cliContext{ctx: clictx}
+					if c.SSHHost() == "" {
 						return errors.New("no host provided")
 					}
 
@@ -275,7 +278,7 @@ func sftpCommand() cli.Command {
 						if err != nil {
 							return err
 						}
-						return lib.ShowFile(name, b, c.GlobalBool("pager"))
+						return lib.ShowFile(name, b, clictx.GlobalBool("pager"))
 					}
 					return lib.SFTPGetAuth(ctx, []string{target}, sshParams, methods, cb, logger)
 				},
@@ -293,7 +296,7 @@ func sftpCommand() cli.Command {
 						Usage: "show hidden files and directories",
 					},
 				},
-				Action: func(c *cli.Context) (e error) {
+				Action: func(clictx *cli.Context) (e error) {
 					defer func() {
 						if e != nil {
 							e = cli.NewExitError(e.Error(), 1)
@@ -311,7 +314,7 @@ func sftpCommand() cli.Command {
 					}()
 
 					params := lib.Params{
-						LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
+						LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 					}
 
 					logger, err := Logger(params.LogLevel)
@@ -320,11 +323,10 @@ func sftpCommand() cli.Command {
 					}
 					defer func() { _ = logger.Sync() }()
 
-					args := c.Args()
-					if len(args) == 0 {
+					c := cliContext{ctx: clictx}
+					if c.SSHHost() == "" {
 						return errors.New("no host provided")
 					}
-
 					sshParams, err := getSSHParams(c)
 					if err != nil {
 						return err
@@ -348,8 +350,8 @@ func sftpCommand() cli.Command {
 						return errors.New("no usable credentials")
 					}
 
-					hidden := c.Bool("hidden")
-					aur := aurora.NewAurora(c.Bool("color"))
+					hidden := clictx.Bool("hidden")
+					aur := aurora.NewAurora(clictx.Bool("color"))
 					return lib.SFTPListAuth(ctx, sshParams, methods, logger, func(path, relname string, isdir bool) error {
 						if isdir {
 							if strings.HasPrefix(filepath.Base(path), ".") {

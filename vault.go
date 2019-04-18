@@ -14,7 +14,6 @@ import (
 	gssh "github.com/stephane-martin/golang-ssh"
 	vexec "github.com/stephane-martin/vault-exec/lib"
 	"github.com/stephane-martin/vssh/lib"
-	"github.com/urfave/cli"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
 )
@@ -43,16 +42,16 @@ func getVaultClient(ctx context.Context, vaultParams lib.VaultParams, l *zap.Sug
 	return client, nil
 }
 
-func getVaultParams(c *cli.Context) lib.VaultParams {
+func getVaultParams(c CLIContext) lib.VaultParams {
 	p := lib.VaultParams{
-		SSHMount:   c.GlobalString("vault-ssh-mount"),
-		SSHRole:    c.GlobalString("vault-ssh-role"),
-		AuthMethod: strings.ToLower(c.GlobalString("vault-method")),
-		AuthPath:   c.GlobalString("vault-auth-path"),
-		Address:    c.GlobalString("vault-addr"),
-		Token:      c.GlobalString("vault-token"),
-		Username:   c.GlobalString("vault-username"),
-		Password:   c.GlobalString("vault-password"),
+		SSHMount:   c.VaultSSHMount(),
+		SSHRole:    c.VaultSSHRole(),
+		AuthMethod: strings.ToLower(c.VaultAuthMethod()),
+		AuthPath:   c.VaultAuthPath(),
+		Address:    c.VaultAddress(),
+		Token:      c.VaultToken(),
+		Username:   c.VaultUsername(),
+		Password:   c.VaultPassword(),
 	}
 	if p.AuthMethod == "" {
 		p.AuthMethod = "token"
@@ -99,15 +98,16 @@ func (c Credentials) AuthMethod() (ssh.AuthMethod, error) {
 	return nil, errors.New("no credentials")
 }
 
-func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *zap.SugaredLogger) (*api.Client, []Credentials, error) {
-	privateKeyPath := c.String("privkey")
+func getCredentials(ctx context.Context, clictx CLIContext, loginName string, l *zap.SugaredLogger) (*api.Client, []Credentials, error) {
+	privateKeyPath := clictx.PrivateKey()
 	if privateKeyPath == "" {
-		p, err := homedir.Expand("~/.ssh/id_rsa")
-		if err != nil {
-			return nil, nil, err
-		}
-		privateKeyPath = p
+		privateKeyPath = "~/.ssh/id_rsa"
 	}
+	p, err := homedir.Expand(privateKeyPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	privateKeyPath = p
 
 	var pubkeyFS *lib.PublicKey
 	privkeyFS, err := lib.ReadPrivateKeyFromFileSystem(privateKeyPath)
@@ -138,7 +138,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 	}
 
 	var vaultClient *api.Client
-	vaultParams := getVaultParams(c)
+	vaultParams := getVaultParams(clictx)
 	if vaultParams.SSHMount != "" {
 		if vaultParams.SSHRole != "" {
 			client, err := getVaultClient(ctx, vaultParams, l)
@@ -157,7 +157,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		l.Infow("vault SSH mount point is not set")
 	}
 
-	privateKeyVaultPath := c.String("vprivkey")
+	privateKeyVaultPath := clictx.VPrivateKey()
 	var privkeyVault *memguard.LockedBuffer
 	if vaultClient != nil && privateKeyVaultPath != "" {
 		pkey, err := lib.ReadPrivateKeyFromVault(ctx, privateKeyVaultPath, vaultClient, l)
@@ -241,7 +241,7 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 		})
 		l.Infow("enabled: private key from filesystem, no certificate")
 	}
-	if c.GlobalBool("password") {
+	if clictx.SSHPassword() {
 		pass, err := lib.InputPassword("Enter SSH password")
 		if err != nil {
 			return nil, nil, err
@@ -254,9 +254,8 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 	return vaultClient, credentials, nil
 }
 
-func getSSHParams(c *cli.Context) (p lib.SSHParams, err error) {
-	args := c.Args()
-	p.Host = strings.TrimSpace(args[0])
+func getSSHParams(c CLIContext) (p lib.SSHParams, err error) {
+	p.Host = strings.TrimSpace(c.SSHHost())
 	if p.Host == "" {
 		return p, errors.New("empty host")
 	}
@@ -266,7 +265,7 @@ func getSSHParams(c *cli.Context) (p lib.SSHParams, err error) {
 		p.Host = spl[1]
 	}
 	if p.LoginName == "" {
-		p.LoginName = c.GlobalString("login")
+		p.LoginName = c.SSHLogin()
 		if p.LoginName == "" {
 			u, err := user.Current()
 			if err != nil {
@@ -275,8 +274,8 @@ func getSSHParams(c *cli.Context) (p lib.SSHParams, err error) {
 			p.LoginName = u.Username
 		}
 	}
-	p.Commands = args[1:]
-	p.Insecure = c.GlobalBool("insecure")
-	p.Port = c.GlobalInt("ssh-port")
+	p.Commands = c.SSHCommand()
+	p.Insecure = c.SSHInsecure()
+	p.Port = c.SSHPort()
 	return p, nil
 }

@@ -51,7 +51,7 @@ func sshCommand() cli.Command {
 	}
 }
 
-func sshAction(c *cli.Context) (e error) {
+func sshAction(clictx *cli.Context) (e error) {
 	defer func() {
 		if e != nil {
 			e = cli.NewExitError(e.Error(), 1)
@@ -69,9 +69,9 @@ func sshAction(c *cli.Context) (e error) {
 	}()
 
 	params := lib.Params{
-		LogLevel: strings.ToLower(strings.TrimSpace(c.GlobalString("loglevel"))),
-		Prefix:   c.Bool("prefix"),
-		Upcase:   c.Bool("upcase"),
+		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
+		Prefix:   clictx.Bool("prefix"),
+		Upcase:   clictx.Bool("upcase"),
 	}
 
 	logger, err := Logger(params.LogLevel)
@@ -80,10 +80,11 @@ func sshAction(c *cli.Context) (e error) {
 	}
 	defer func() { _ = logger.Sync() }()
 
-	args := c.Args()
-	if len(args) == 0 {
+	if len(clictx.Args()) == 0 {
 		return errors.New("no host provided")
 	}
+
+	c := cliContext{ctx: clictx}
 	sshParams, err := getSSHParams(c)
 	if err != nil {
 		return err
@@ -107,7 +108,7 @@ func sshAction(c *cli.Context) (e error) {
 		return errors.New("no usable credentials")
 	}
 
-	secretPaths := c.StringSlice("secret")
+	secretPaths := clictx.StringSlice("secret")
 	var secrets map[string]string
 	if len(secretPaths) > 0 {
 		if client != nil {
@@ -122,5 +123,5 @@ func sshAction(c *cli.Context) (e error) {
 	}
 
 	// TODO: restore native connext
-	return lib.GoConnectAuth(ctx, sshParams, c.Bool("terminal"), methods, secrets, logger)
+	return lib.GoConnectAuth(ctx, sshParams, clictx.Bool("terminal"), methods, secrets, logger)
 }

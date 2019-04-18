@@ -4,6 +4,8 @@ import (
 	"os"
 
 	"github.com/awnumar/memguard"
+	"github.com/gdamore/tcell"
+	"github.com/rivo/tview"
 	"github.com/urfave/cli"
 )
 
@@ -24,4 +26,9 @@ func main() {
 	_ = app.Run(os.Args)
 	stopAgent()
 	cli.OsExiter(0)
+}
+
+func init() {
+	tview.Styles.ContrastBackgroundColor = tcell.ColorSlateGrey
+	tview.Styles.PrimaryTextColor = tcell.ColorWhite
 }
