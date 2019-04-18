@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func GoConnectAuth(ctx context.Context, sshParams SSHParams, auth []ssh.AuthMethod, env map[string]string, l *zap.SugaredLogger) error {
+func GoConnectAuth(ctx context.Context, sshParams SSHParams, terminal bool, auth []ssh.AuthMethod, env map[string]string, l *zap.SugaredLogger) error {
 	if len(auth) == 0 {
 		return errors.New("no auth method")
 	}
@@ -38,7 +38,7 @@ func GoConnectAuth(ctx context.Context, sshParams SSHParams, auth []ssh.AuthMeth
 		}
 	}
 	commands := append(pre, sshParams.Commands...)
-	if len(sshParams.Commands) == 0 || sshParams.ForceTerminal {
+	if len(sshParams.Commands) == 0 || terminal {
 		return gssh.Shell(ctx, cfg, os.Stdin, os.Stdout, os.Stderr, commands...)
 	}
 	err = gssh.OutputWithPty(ctx, cfg, strings.Join(commands, " "), os.Stdout, os.Stderr)
@@ -48,7 +48,7 @@ func GoConnectAuth(ctx context.Context, sshParams SSHParams, auth []ssh.AuthMeth
 	return nil
 }
 
-func GoConnect(ctx context.Context, sshParams SSHParams, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func GoConnect(ctx context.Context, sshParams SSHParams, terminal bool, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	c, err := gssh.ParseCertificate(cert.Buffer())
 	if err != nil {
 		return err
@@ -61,5 +61,5 @@ func GoConnect(ctx context.Context, sshParams SSHParams, privkey, cert *memguard
 	if err != nil {
 		return err
 	}
-	return GoConnectAuth(ctx, sshParams, []ssh.AuthMethod{ssh.PublicKeys(signer)}, env, l)
+	return GoConnectAuth(ctx, sshParams, terminal, []ssh.AuthMethod{ssh.PublicKeys(signer)}, env, l)
 }

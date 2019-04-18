@@ -47,7 +47,7 @@ func writeKey(path string, key *memguard.LockedBuffer) error {
 	return err
 }
 
-func NativeConnect(ctx context.Context, sshParams SSHParams, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func NativeConnect(ctx context.Context, sshParams SSHParams, terminal, verbose bool, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -72,10 +72,10 @@ func NativeConnect(ctx context.Context, sshParams SSHParams, priv *memguard.Lock
 	}
 
 	var allArgs []string
-	if sshParams.Verbose {
+	if verbose {
 		allArgs = append(allArgs, "-v")
 	}
-	if sshParams.ForceTerminal {
+	if terminal {
 		allArgs = append(allArgs, "-t")
 	}
 

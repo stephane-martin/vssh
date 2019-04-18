@@ -23,34 +23,6 @@ func sshCommand() cli.Command {
 		Usage:  "connect to remote server with SSH using Vault for authentication",
 		Action: sshAction,
 		Flags: []cli.Flag{
-			cli.StringFlag{
-				Name:   "login,l",
-				Usage:  "SSH remote user",
-				EnvVar: "SSH_USER",
-			},
-			cli.IntFlag{
-				Name:   "ssh-port,sshport,p",
-				Usage:  "SSH remote port",
-				EnvVar: "SSH_PORT",
-				Value:  22,
-			},
-			cli.StringFlag{
-				Name:   "privkey,private,identity,i",
-				Usage:  "filesystem path to SSH private key",
-				EnvVar: "IDENTITY",
-				Value:  "",
-			},
-			cli.StringFlag{
-				Name:   "vprivkey,vprivate,videntity",
-				Usage:  "Vault secret path to SSH private key",
-				EnvVar: "VIDENTITY",
-				Value:  "",
-			},
-			cli.BoolFlag{
-				Name:   "insecure",
-				Usage:  "do not check the remote SSH host key",
-				EnvVar: "SSH_INSECURE",
-			},
 			cli.BoolFlag{
 				Name:   "native",
 				Usage:  "use the native SSH client instead of the builtin one",
@@ -112,7 +84,7 @@ func sshAction(c *cli.Context) (e error) {
 	if len(args) == 0 {
 		return errors.New("no host provided")
 	}
-	sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
+	sshParams, err := getSSHParams(c)
 	if err != nil {
 		return err
 	}
@@ -150,5 +122,5 @@ func sshAction(c *cli.Context) (e error) {
 	}
 
 	// TODO: restore native connext
-	return lib.GoConnectAuth(ctx, sshParams, methods, secrets, logger)
+	return lib.GoConnectAuth(ctx, sshParams, c.Bool("terminal"), methods, secrets, logger)
 }

@@ -254,8 +254,8 @@ func getCredentials(ctx context.Context, c *cli.Context, loginName string, l *za
 	return vaultClient, credentials, nil
 }
 
-func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams, err error) {
-	p.Verbose = verbose
+func getSSHParams(c *cli.Context) (p lib.SSHParams, err error) {
+	args := c.Args()
 	p.Host = strings.TrimSpace(args[0])
 	if p.Host == "" {
 		return p, errors.New("empty host")
@@ -266,7 +266,7 @@ func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams,
 		p.Host = spl[1]
 	}
 	if p.LoginName == "" {
-		p.LoginName = c.String("login")
+		p.LoginName = c.GlobalString("login")
 		if p.LoginName == "" {
 			u, err := user.Current()
 			if err != nil {
@@ -276,11 +276,7 @@ func getSSHParams(c *cli.Context, verbose bool, args []string) (p lib.SSHParams,
 		}
 	}
 	p.Commands = args[1:]
-
-	p.Insecure = c.Bool("insecure")
-	p.Port = c.Int("ssh-port")
-	p.Native = c.Bool("native")
-	p.ForceTerminal = c.Bool("terminal")
-
+	p.Insecure = c.GlobalBool("insecure")
+	p.Port = c.GlobalInt("ssh-port")
 	return p, nil
 }

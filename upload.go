@@ -100,7 +100,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 		if len(args) == 0 {
 			return errors.New("no host provided")
 		}
-		sshParams, err := getSSHParams(c, params.LogLevel == DEBUG, args)
+		sshParams, err := getSSHParams(c)
 		if err != nil {
 			return err
 		}

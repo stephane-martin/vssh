@@ -58,9 +58,9 @@
   name = "github.com/alecthomas/chroma"
   version = "0.6.3"
 
-[[constraint]]
-  name = "github.com/gobwas/glob"
-  version = "0.2.3"
+#[[constraint]]
+#  name = "github.com/gobwas/glob"
+#  version = "0.2.3"
 
 [[constraint]]
   name = "github.com/scylladb/go-set"

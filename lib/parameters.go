@@ -12,14 +12,11 @@ type VaultParams struct {
 }
 
 type SSHParams struct {
-	Port          int
-	Insecure      bool
-	Native        bool
-	ForceTerminal bool
-	Verbose       bool
-	LoginName     string
-	Host          string
-	Commands      []string
+	Port      int
+	Insecure  bool
+	LoginName string
+	Host      string
+	Commands  []string
 }
 
 type Params struct {

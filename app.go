@@ -96,19 +96,19 @@ func GlobalFlags() []cli.Flag {
 			EnvVar: "VAULT_AUTH_PATH",
 		},
 		cli.StringFlag{
-			Name:   "vault-username,U",
+			Name:   "vault-username",
 			Usage:  "Vault username or RoleID",
 			Value:  "",
 			EnvVar: "VAULT_USERNAME",
 		},
 		cli.StringFlag{
-			Name:   "vault-password,P",
+			Name:   "vault-password",
 			Usage:  "Vault password or SecretID",
 			Value:  "",
 			EnvVar: "VAULT_PASSWORD",
 		},
 		cli.StringFlag{
-			Name:   "vault-ssh-mount,mount,m",
+			Name:   "vault-ssh-mount,mount",
 			Usage:  "Vault SSH signer mount point",
 			EnvVar: "VAULT_SSH_MOUNT",
 			Value:  "ssh-client-signer",
@@ -118,6 +118,41 @@ func GlobalFlags() []cli.Flag {
 			Usage:  "Vault signing role",
 			EnvVar: "VAULT_SSH_ROLE",
 		},
+
+		cli.StringFlag{
+			Name:   "login,l",
+			Usage:  "SSH remote user",
+			EnvVar: "SSH_USER",
+		},
+		cli.IntFlag{
+			Name:   "ssh-port,sshport,P",
+			Usage:  "SSH remote port",
+			EnvVar: "SSH_PORT",
+			Value:  22,
+		},
+		cli.StringFlag{
+			Name:   "privkey,private,identity,i",
+			Usage:  "filesystem path to SSH private key",
+			EnvVar: "IDENTITY",
+			Value:  "",
+		},
+		cli.StringFlag{
+			Name:   "vprivkey,vprivate,videntity",
+			Usage:  "Vault secret path to SSH private key",
+			EnvVar: "VIDENTITY",
+			Value:  "",
+		},
+		cli.BoolFlag{
+			Name:   "insecure",
+			Usage:  "do not check the remote SSH host key",
+			EnvVar: "SSH_INSECURE",
+		},
+		cli.BoolFlag{
+			Name:   "password",
+			Usage:  "enable SSH password authentication",
+			EnvVar: "VSSH_SSH_PASSWORD",
+		},
+
 		cli.StringFlag{
 			Name:  "loglevel",
 			Usage: "logging level",
@@ -127,11 +162,6 @@ func GlobalFlags() []cli.Flag {
 			Name:   "pager",
 			Usage:  "use external pager",
 			EnvVar: "VSSH_EXTERNAL_PAGER",
-		},
-		cli.BoolFlag{
-			Name:   "password",
-			Usage:  "enable SSH password authentication",
-			EnvVar: "VSSH_SSH_PASSWORD",
 		},
 	}
 }
