@@ -58,6 +58,10 @@
   name = "github.com/alecthomas/chroma"
   version = "0.6.3"
 
+[[constraint]]
+  name = "github.com/gabriel-vasile/mimetype"
+  version = "0.3.2"
+
 #[[constraint]]
 #  name = "github.com/gobwas/glob"
 #  version = "0.2.3"
@@ -69,6 +73,10 @@
 [[constraint]]
   name = "github.com/google/gops"
   version = "0.3.6"
+
+[[constraint]]
+  name = "github.com/stephane-martin/go-mimeapps"
+  branch = "master"
 
 [prune]
   go-tests = true

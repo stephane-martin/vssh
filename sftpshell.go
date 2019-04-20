@@ -18,6 +18,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/sftp"
 	"github.com/scylladb/go-set/strset"
+	"github.com/stephane-martin/go-mimeapps"
 	"github.com/stephane-martin/vssh/lib"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -42,6 +43,7 @@ type shellstate struct {
 	methods       map[string]command
 	completes     map[string]cmpl
 	externalPager bool
+	tempfiles     *strset.Set
 	info          func(string)
 	err           func(string)
 }
@@ -61,6 +63,7 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		initRemoteWD:  remotewd,
 		client:        client,
 		externalPager: externalPager,
+		tempfiles:     strset.New(),
 		info:          infoFunc,
 		err:           errFunc,
 	}
@@ -77,6 +80,7 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"lcd":       s.lcd,
 		"edit":      s.edit,
 		"ledit":     s.ledit,
+		"lopen":     s.lopen,
 		"exit":      s.exit,
 		"logout":    s.exit,
 		"q":         s.exit,
@@ -104,7 +108,19 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 	return s, nil
 }
 
-func (s *shellstate) width() int {
+func (s *shellstate) Close() error {
+	var err error
+	s.tempfiles.Each(func(fname string) bool {
+		e := os.Remove(fname)
+		if e != nil && err == nil {
+			err = e
+		}
+		return true
+	})
+	return err
+}
+
+func (s *shellstate) Width() int {
 	width, _, err := terminal.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
 		return 80
@@ -116,7 +132,7 @@ func (s *shellstate) exit(_ []string, flags *strset.Set) (string, error) {
 	return "", io.EOF
 }
 
-func (s *shellstate) complete(cmd string, args []string) []string {
+func (s *shellstate) Complete(cmd string, args []string) []string {
 	fun := s.completes[cmd]
 	if fun == nil {
 		return nil
@@ -124,7 +140,7 @@ func (s *shellstate) complete(cmd string, args []string) []string {
 	return fun(args)
 }
 
-func (s *shellstate) dispatch(line string) (string, error) {
+func (s *shellstate) Dispatch(line string) (string, error) {
 	line = strings.TrimSpace(line)
 	if line == "" {
 		return "", nil
@@ -688,6 +704,25 @@ func findMatches(args []string, wd string, client *sftp.Client, o only) (*strset
 	return allmatches, nil
 }
 
+func (s *shellstate) lopen(args []string, flags *strset.Set) (string, error) {
+	if len(args) != 1 {
+		return "", errors.New("lopen takes exactly one argument")
+	}
+	filename := join(s.LocalWD, args[0])
+	f, err := os.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	tempFile, err := mimeapps.OpenRemote(filename, f)
+	if tempFile != "" {
+		s.tempfiles.Add(tempFile)
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
 func (s *shellstate) ledit(args []string, flags *strset.Set) (string, error) {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
@@ -973,11 +1008,11 @@ func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Cl
 }
 
 func (s *shellstate) lls(args []string, flags *strset.Set) (string, error) {
-	return _ls(s.LocalWD, s.width(), args, flags, nil)
+	return _ls(s.LocalWD, s.Width(), args, flags, nil)
 }
 
 func (s *shellstate) ls(args []string, flags *strset.Set) (string, error) {
-	return _ls(s.RemoteWD, s.width(), args, flags, s.client)
+	return _ls(s.RemoteWD, s.Width(), args, flags, s.client)
 }
 
 func (s *shellstate) lll(args []string, flags *strset.Set) (string, error) {

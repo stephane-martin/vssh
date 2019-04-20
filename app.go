@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"path/filepath"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 )
@@ -21,24 +21,26 @@ func App() *cli.App {
 		scpCommand(),
 		sftpCommand(),
 		cli.Command{
-			Name: "glob",
-			Action: func(c *cli.Context) error {
-				matches, err := filepath.Glob(c.Args()[0])
-				if err != nil {
-					return cli.NewExitError(err.Error(), 1)
-				}
-				for _, m := range matches {
-					fmt.Println(m)
-				}
-				return nil
-			},
-		},
-
-		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",
 			Action: func(c *cli.Context) error {
 				fmt.Println(version)
+				return nil
+			},
+		},
+		cli.Command{
+			Name:  "mimetype",
+			Usage: "detect mimetype of file argument",
+			Action: func(c *cli.Context) error {
+				if len(c.Args()) == 0 {
+					return nil
+				}
+				mime, ext, err := mimetype.DetectFile(c.Args()[0])
+				if err != nil {
+					fmt.Println(err)
+					return nil
+				}
+				fmt.Println(mime, ext)
 				return nil
 			},
 		},

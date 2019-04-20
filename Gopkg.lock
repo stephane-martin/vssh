@@ -107,6 +107,18 @@
   version = "v1.13.1"
 
 [[projects]]
+  digest = "1:ae83f1cc506f08fb15b70ab890d8b12ce0621ad3cafbef072e4d6151506e1ed8"
+  name = "github.com/gabriel-vasile/mimetype"
+  packages = [
+    ".",
+    "internal/json",
+    "internal/matchers",
+  ]
+  pruneopts = "UT"
+  revision = "db305cf4981bf55d50593934f8da422d6ffdeba9"
+  version = "v0.3.2"
+
+[[projects]]
   digest = "1:0e16b03c72bd42739ca68d055c10369e60d17838428f512f3b29ae115ba788e0"
   name = "github.com/gdamore/encoding"
   packages = ["."]
@@ -124,6 +136,14 @@
   pruneopts = "UT"
   revision = "aaadc574a6ed8dc3abe56036ca130dcee1ee6b6e"
   version = "v1.1.1"
+
+[[projects]]
+  digest = "1:d37c61a335d13bc49b3f90e9e13c8686e4548839b69c58549e727afb2245c454"
+  name = "github.com/go-ini/ini"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "c85607071cf08ca1adaf48319cd1aa322e81d8c1"
+  version = "v1.42.0"
 
 [[projects]]
   digest = "1:e4f5819333ac698d294fe04dbf640f84719658d5c7ce195b10060cc37292ce79"
@@ -404,6 +424,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:91fb7bc85f0b6c1d14155b629116ce5444128fb570479f48d631cf0a4172f3a1"
+  name = "github.com/stephane-martin/go-mimeapps"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "06dd13a243e289b3ee153919869a2f9978dfa281"
+
+[[projects]]
+  branch = "master"
   digest = "1:5eb88d3fa3392fc3b8b036bd18a2a7b6bbf89da41d8dd89f16b34b4e00dd6cf3"
   name = "github.com/stephane-martin/go-vis"
   packages = ["."]
@@ -569,6 +597,7 @@
     "github.com/alecthomas/chroma/lexers",
     "github.com/alecthomas/chroma/styles",
     "github.com/awnumar/memguard",
+    "github.com/gabriel-vasile/mimetype",
     "github.com/gdamore/tcell",
     "github.com/google/gops/agent",
     "github.com/hashicorp/go-cleanhttp",
@@ -583,6 +612,7 @@
     "github.com/pkg/sftp",
     "github.com/rivo/tview",
     "github.com/scylladb/go-set/strset",
+    "github.com/stephane-martin/go-mimeapps",
     "github.com/stephane-martin/go-vis",
     "github.com/stephane-martin/golang-ssh",
     "github.com/stephane-martin/vault-exec/lib",

@@ -95,6 +95,9 @@ func sftpCommand() cli.Command {
 			if err != nil {
 				return err
 			}
+			defer func() {
+				_ = state.Close()
+			}()
 
 			line := liner.NewLiner()
 			defer line.Close()
@@ -141,7 +144,7 @@ func sftpCommand() cli.Command {
 				}
 				cmdStart := strings.ToLower(args[0])
 				if linq.From(commands).Contains(cmdStart) {
-					props := state.complete(cmdStart, args[1:])
+					props := state.Complete(cmdStart, args[1:])
 					if len(props) == 0 {
 						return nil
 					}
@@ -160,7 +163,7 @@ func sftpCommand() cli.Command {
 
 		L:
 			for {
-				termWidth := state.width() - 1
+				termWidth := state.Width() - 1
 				shortLocalWD := shorten(state.LocalWD)
 				promptWidth := 11 + len(state.RemoteWD) + len(shortLocalWD)
 				moreSpaces := termWidth - promptWidth
@@ -184,7 +187,7 @@ func sftpCommand() cli.Command {
 					continue L
 				}
 				line.AppendHistory(l)
-				res, err := state.dispatch(l)
+				res, err := state.Dispatch(l)
 				if err == io.EOF {
 					return nil
 				}
