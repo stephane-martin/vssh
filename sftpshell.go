@@ -80,6 +80,7 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"lcd":       s.lcd,
 		"edit":      s.edit,
 		"ledit":     s.ledit,
+		"open":      s.open,
 		"lopen":     s.lopen,
 		"exit":      s.exit,
 		"logout":    s.exit,
@@ -714,6 +715,27 @@ func (s *shellstate) lopen(args []string, flags *strset.Set) (string, error) {
 		return "", err
 	}
 	tempFile, err := mimeapps.OpenRemote(filename, f)
+	_ = f.Close()
+	if tempFile != "" {
+		s.tempfiles.Add(tempFile)
+	}
+	if err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func (s *shellstate) open(args []string, flags *strset.Set) (string, error) {
+	if len(args) != 1 {
+		return "", errors.New("open takes exactly one argument")
+	}
+	filename := join(s.RemoteWD, args[0])
+	f, err := s.client.Open(filename)
+	if err != nil {
+		return "", err
+	}
+	tempFile, err := mimeapps.OpenRemote(filename, f)
+	_ = f.Close()
 	if tempFile != "" {
 		s.tempfiles.Add(tempFile)
 	}
