@@ -33,7 +33,7 @@ const (
 
 type command func([]string, *strset.Set) (string, error)
 
-type cmpl func([]string) []string
+type cmpl func([]string, bool) []string
 
 type shellstate struct {
 	LocalWD       string
@@ -101,10 +101,15 @@ func newShellState(client *sftp.Client, externalPager bool, infoFunc func(string
 		"rename":    s.rename,
 	}
 	s.completes = map[string]cmpl{
-		"cd":    s.completeCd,
-		"lcd":   s.completeLcd,
-		"less":  s.completeLess,
-		"lless": s.completeLless,
+		"cd":     s.completeCd,
+		"lcd":    s.completeLcd,
+		"less":   s.completeLess,
+		"lless":  s.completeLless,
+		"open":   s.completeOpen,
+		"lopen":  s.completeLopen,
+		"rmdir":  s.completeRmdir,
+		"lrmdir": s.completeLrmdir,
+		"ledit":  s.completeLedit,
 	}
 	return s, nil
 }
@@ -133,12 +138,12 @@ func (s *shellstate) exit(_ []string, flags *strset.Set) (string, error) {
 	return "", io.EOF
 }
 
-func (s *shellstate) Complete(cmd string, args []string) []string {
+func (s *shellstate) Complete(cmd string, args []string, lastSpace bool) []string {
 	fun := s.completes[cmd]
 	if fun == nil {
 		return nil
 	}
-	return fun(args)
+	return fun(args, lastSpace)
 }
 
 func (s *shellstate) Dispatch(line string) (string, error) {
@@ -1101,30 +1106,6 @@ func (s *shellstate) ll(args []string, flags *strset.Set) (string, error) {
 	}
 }
 
-func (s *shellstate) completeLess(args []string) []string {
-	if len(args) > 1 {
-		return nil
-	}
-	var input string
-	if len(args) == 1 {
-		input = args[0]
-	}
-	cand, dirname, relDirname := candidate(s.RemoteWD, input)
-	files, err := s.client.ReadDir(dirname)
-	if err != nil {
-		return nil
-	}
-
-	props := completeFiles(cand, files, filesAndDirs)
-	if len(props) == 0 {
-		return nil
-	}
-	linq.From(props).SelectT(func(s string) string {
-		return join(relDirname, s)
-	}).ToSlice(&props)
-	return props
-}
-
 func base(s string) string {
 	s = filepath.Base(s)
 	if s == "/" {
@@ -1158,20 +1139,83 @@ func candidate(wd, input string) (cand, dirname, relDirname string) {
 	return cand, dirname, rel(wd, dirname)
 }
 
-func (s *shellstate) completeLless(args []string) []string {
-	if len(args) > 1 {
+func _completeArgManyFile(wd string, client *sftp.Client, readDir func(string) ([]os.FileInfo, error), args []string, lastSpace bool) []string {
+	if len(args) == 0 {
+		return _completeArgOne(wd, readDir, nil, false, filesAndDirs)
+	}
+	var arg, firstArgs []string
+	if lastSpace {
+		firstArgs = args
+	} else {
+		arg = args[len(args)-1:]
+		firstArgs = args[0 : len(args)-1]
+	}
+	if len(firstArgs) > 0 {
+		// quote the first arguments for later use
+		// TODO: make it a func
+		linq.From(firstArgs).SelectT(func(p string) string {
+			var buf bytes.Buffer
+			quote(p, &buf)
+			return buf.String()
+		}).ToSlice(&firstArgs)
+	}
+	if !lastSpace && lib.HasMeta(arg[0]) {
+		// expand the glob pattern
+		matches, err := findMatches(arg, wd, client, onlyFiles)
+		if err != nil {
+			return nil
+		}
+		if matches.Size() == 0 {
+			return nil
+		}
+		list := make([]string, 0, matches.Size())
+		matches.Each(func(m string) bool {
+			m = rel(wd, m)
+			var buf bytes.Buffer
+			quote(m, &buf)
+			list = append(list, buf.String())
+			return true
+		})
+		line := strings.Join(append(firstArgs, list...), " ")
+		return []string{line}
+	}
+	var props []string
+	if lastSpace {
+		// new last empty argument
+		props = _completeArgOne(wd, readDir, nil, false, filesAndDirs)
+	} else {
+		// there is no glob pattern: try to complete the last argument
+		props = _completeArgOne(wd, readDir, arg, false, filesAndDirs)
+	}
+	if len(props) == 0 {
+		return nil
+	}
+	if len(firstArgs) == 0 {
+		return props
+	}
+	linq.From(props).SelectT(func(s string) string {
+		var result []string
+		result = append(result, firstArgs...)
+		result = append(result, s)
+		return strings.Join(result, " ")
+	}).ToSlice(&props)
+	return props
+}
+
+func _completeArgOne(wd string, readDir func(string) ([]os.FileInfo, error), args []string, lastSpace bool, o only) []string {
+	if lastSpace || len(args) > 1 {
 		return nil
 	}
 	var input string
 	if len(args) == 1 {
 		input = args[0]
 	}
-	cand, dirname, relDirname := candidate(s.LocalWD, input)
-	files, err := ioutil.ReadDir(dirname)
+	cand, dirname, relDirname := candidate(wd, input)
+	files, err := readDir(dirname)
 	if err != nil {
 		return nil
 	}
-	props := completeFiles(cand, files, filesAndDirs)
+	props := completeFiles(cand, files, o)
 	if len(props) == 0 {
 		return nil
 	}
@@ -1181,50 +1225,42 @@ func (s *shellstate) completeLless(args []string) []string {
 	return props
 }
 
-func (s *shellstate) completeLcd(args []string) []string {
-	if len(args) > 1 {
-		return nil
-	}
-	var input string
-	if len(args) == 1 {
-		input = args[0]
-	}
-	cand, dirname, relDirname := candidate(s.LocalWD, input)
-	files, err := ioutil.ReadDir(dirname)
-	if err != nil {
-		return nil
-	}
-	props := completeFiles(cand, files, onlyDirs)
-	if len(props) == 0 {
-		return nil
-	}
-	linq.From(props).SelectT(func(s string) string {
-		return join(relDirname, s)
-	}).ToSlice(&props)
-	return props
+func (s *shellstate) completeLedit(args []string, lastSpace bool) []string {
+	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
 }
 
-func (s *shellstate) completeCd(args []string) []string {
-	if len(args) > 1 {
-		return nil
-	}
-	var input string
-	if len(args) == 1 {
-		input = args[0]
-	}
-	cand, dirname, relDirname := candidate(s.RemoteWD, input)
-	files, err := s.client.ReadDir(dirname)
-	if err != nil {
-		return nil
-	}
-	props := completeFiles(cand, files, onlyDirs)
-	if len(props) == 0 {
-		return nil
-	}
-	linq.From(props).SelectT(func(s string) string {
-		return join(relDirname, s)
-	}).ToSlice(&props)
-	return props
+func (s *shellstate) completeLopen(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, filesAndDirs)
+}
+
+func (s *shellstate) completeOpen(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, filesAndDirs)
+}
+
+func (s *shellstate) completeLless(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, filesAndDirs)
+}
+
+func (s *shellstate) completeLess(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, filesAndDirs)
+}
+
+func (s *shellstate) completeLcd(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, onlyDirs)
+}
+
+func (s *shellstate) completeCd(args []string, lastSpace bool) []string {
+	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
+}
+
+func (s *shellstate) completeLrmdir(args []string, lastSpace bool) []string {
+	// FIX (many)
+	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, onlyDirs)
+}
+
+func (s *shellstate) completeRmdir(args []string, lastSpace bool) []string {
+	// FIX (many)
+	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
 }
 
 func completeFiles(candidate string, files []os.FileInfo, o only) []string {

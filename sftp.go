@@ -127,6 +127,7 @@ func sftpCommand() cli.Command {
 				"cd", "lcd",
 				"edit", "ledit",
 				"less", "lless",
+				"open", "lopen",
 				"mkdir", "lmkdir", "mkdirall", "lmkdirall",
 				"pwd", "lpwd",
 				"rename",
@@ -142,21 +143,31 @@ func sftpCommand() cli.Command {
 				if len(args) == 0 {
 					return commands
 				}
+				var props []string
+				lastSpace := line[len(line)-1] == ' '
 				cmdStart := strings.ToLower(args[0])
-				if linq.From(commands).Contains(cmdStart) {
-					props := state.Complete(cmdStart, args[1:])
-					if len(props) == 0 {
-						return nil
-					}
-					linq.From(props).SelectT(func(p string) string { return cmdStart + " " + p }).ToSlice(&props)
-					return props
-				}
-				if len(args) == 1 {
-					var props []string
+				args = args[1:]
+				if len(args) == 0 && !lastSpace {
+					// try to complete the command
 					linq.From(commands).WhereT(func(cmd string) bool { return strings.HasPrefix(cmd, cmdStart) }).ToSlice(&props)
 					return props
 				}
-				return nil
+				if !linq.From(commands).Contains(cmdStart) {
+					// unknown command
+					return nil
+				}
+				if len(args) == 0 {
+					// complete first empty argument
+					props = state.Complete(cmdStart, nil, false)
+				} else {
+					// complete the last partial argument, or a last new empty argument
+					props = state.Complete(cmdStart, args, lastSpace)
+				}
+				if len(props) == 0 {
+					return nil
+				}
+				linq.From(props).SelectT(func(p string) string { return cmdStart + " " + p }).ToSlice(&props)
+				return props
 			})
 			line.SetCtrlCAborts(true)
 			line.SetTabCompletionStyle(liner.TabCircular)
