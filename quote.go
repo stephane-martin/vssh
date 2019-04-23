@@ -12,6 +12,18 @@ const (
 	prefixChars       = "~"
 )
 
+func quoteString(word string) string {
+	var buf bytes.Buffer
+	quote(word, &buf)
+	return buf.String()
+}
+
+func quoteSlice(words []string) {
+	for i := range words {
+		words[i] = quoteString(words[i])
+	}
+}
+
 func quote(word string, buf *bytes.Buffer) {
 	// We want to try to produce a "nice" output. As such, we will
 	// backslash-escape most characters, but if we encounter a space, or if we

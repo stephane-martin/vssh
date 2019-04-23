@@ -85,11 +85,12 @@ func sftpCommand() cli.Command {
 			state, err := newShellState(
 				client,
 				clictx.GlobalBool("pager"),
-				func(info string) {
-					fmt.Fprintln(os.Stderr, aurora.Blue("-> "+info))
+				os.Stdout,
+				func(f string, a ...interface{}) {
+					fmt.Fprintln(os.Stderr, aurora.Blue("-> "+fmt.Sprintf(f, a...)))
 				},
-				func(err string) {
-					fmt.Fprintln(os.Stderr, aurora.Red("===> "+err))
+				func(f string, a ...interface{}) {
+					fmt.Fprintln(os.Stderr, aurora.Red("===> "+fmt.Sprintf(f, a...)))
 				},
 			)
 			if err != nil {
@@ -198,7 +199,7 @@ func sftpCommand() cli.Command {
 					continue L
 				}
 				line.AppendHistory(l)
-				res, err := state.Dispatch(l)
+				err = state.Dispatch(l)
 				if err == io.EOF {
 					return nil
 				}
@@ -206,10 +207,7 @@ func sftpCommand() cli.Command {
 					fmt.Fprintln(os.Stderr, aurora.Red("===> "+err.Error()))
 					continue L
 				}
-				fmt.Print(res)
-				if res != "" && !strings.HasSuffix(res, "\n") {
-					fmt.Println()
-				}
+				// fmt.Println()
 			}
 		},
 		Subcommands: []cli.Command{
