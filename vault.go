@@ -235,6 +235,7 @@ func getCredentials(ctx context.Context, clictx CLIContext, loginName string, l 
 			})
 			l.Infow("enabled: private key and certificate from filesystem")
 		}
+
 		credentials = append(credentials, Credentials{
 			PrivateKey: privkeyFS,
 			PublicKey:  pubkeyFS,

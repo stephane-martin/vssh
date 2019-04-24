@@ -439,12 +439,12 @@
   revision = "21a848b7a7621d1ab718662f1b1b41ce7f7b097f"
 
 [[projects]]
-  digest = "1:6d9ba924521b2f727ce8271c1569b043039bdd31ca8f6ff4b64711f3d72ff559"
+  digest = "1:78eb7f068f0ff2495a2a5c494d44acf3f919465ff88a1b7ec14df741b8aad6c2"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5bec9a2f1858578114b8b6e704e0877c905bc595"
-  version = "v0.6.1"
+  revision = "c89e65995f9ed46c27563bee723b0e29454b1f80"
+  version = "v0.6.3"
 
 [[projects]]
   digest = "1:ab93e2cd3289b7ba468d925f6f21ad06d8faf149e8bcc339fb73386a749ea999"
