@@ -1,13 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -15,31 +17,48 @@ import (
 
 // credits to https://github.com/rapidloop/rtop
 
-func runCommand(client *ssh.Client, command string) (string, error) {
+func runCommand(ctx context.Context, client *ssh.Client, command string) ([]string, error) {
 	session, err := client.NewSession()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer session.Close()
+	var canceled int32
+	go func() {
+		<-ctx.Done()
+		atomic.StoreInt32(&canceled, 1)
+		session.Close()
+	}()
 	var buf bytes.Buffer
 	var buferr bytes.Buffer
 	session.Stdout = &buf
 	session.Stderr = &buferr
 	err = session.Run(command)
+	if atomic.LoadInt32(&canceled) == 1 {
+		return nil, context.Canceled
+	}
+	session.Close()
 	if err != nil {
 		stderr := strings.TrimSpace(buferr.String())
 		if stderr != "" {
-			return "", errors.New(stderr)
+			return nil, errors.New(stderr)
 		}
-		return "", err
+		return nil, err
 	}
-	return buf.String(), nil
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	return lines, nil
 }
 
 type FSInfo struct {
 	MountPoint string
 	Used       uint64
 	Free       uint64
+}
+
+func (fs FSInfo) Total() uint64 {
+	return fs.Used + fs.Free
 }
 
 type NetInfo struct {
@@ -146,16 +165,16 @@ func (e *Merror) IsZero() bool {
 	return false
 }
 
-func (s *RemoteStater) Get() (Stats, error) {
+func (s *RemoteStater) Get(ctx context.Context) (Stats, error) {
 	var stats Stats
 	var merr Merror
-	stats.Uptime, merr.Uptime = s.getUptime()
-	stats.Hostname, merr.Hostname = s.getHostname()
-	stats.Load, merr.Load = s.getLoadInfo()
-	stats.Mem, merr.Mem = s.getMemInfo()
-	stats.FS, merr.FS = s.getFSInfos()
-	stats.Net, merr.Net = s.getNetInfos()
-	stats.CPU, merr.CPU = s.getCPUInfo()
+	stats.Uptime, merr.Uptime = s.getUptime(ctx)
+	stats.Hostname, merr.Hostname = s.getHostname(ctx)
+	stats.Load, merr.Load = s.getLoadInfo(ctx)
+	stats.Mem, merr.Mem = s.getMemInfo(ctx)
+	stats.FS, merr.FS = s.getFSInfos(ctx)
+	stats.Net, merr.Net = s.getNetInfos(ctx)
+	stats.CPU, merr.CPU = s.getCPUInfo(ctx)
 	if merr.IsZero() {
 		return stats, nil
 	}
@@ -164,13 +183,13 @@ func (s *RemoteStater) Get() (Stats, error) {
 
 var z time.Duration
 
-func (s *RemoteStater) getUptime() (time.Duration, error) {
-	uptime, err := runCommand(s.client, "/bin/cat /proc/uptime")
+func (s *RemoteStater) getUptime(ctx context.Context) (time.Duration, error) {
+	uptime, err := runCommand(ctx, s.client, "/bin/cat /proc/uptime")
 	if err != nil {
-		return s.getUptimeBSD()
+		return s.getUptimeBSD(ctx)
 	}
 
-	parts := strings.Fields(uptime)
+	parts := strings.Fields(uptime[0])
 	if len(parts) == 0 {
 		return z, errors.New("inconsistent /proc/uptime")
 	}
@@ -181,40 +200,40 @@ func (s *RemoteStater) getUptime() (time.Duration, error) {
 	return time.Duration(upsecs * float64(time.Second)), nil
 }
 
-func (s *RemoteStater) getUptimeBSD() (time.Duration, error) {
-	currentDateStr, err := runCommand(s.client, "date +%s")
+func (s *RemoteStater) getUptimeBSD(ctx context.Context) (time.Duration, error) {
+	currentDateStr, err := runCommand(ctx, s.client, "date +%s")
 	if err != nil {
 		return z, fmt.Errorf("date: %s", err)
 	}
-	currentDate, err := strconv.ParseInt(strings.TrimSpace(currentDateStr), 10, 32)
+	currentDate, err := strconv.ParseInt(currentDateStr[0], 10, 32)
 	if err != nil {
 		return z, fmt.Errorf("failed convert seconds to integer: %s", err)
 	}
-	bootTimeStr, err := runCommand(s.client, "sysctl -n kern.boottime")
+	bootTimeStr, err := runCommand(ctx, s.client, "sysctl -n kern.boottime")
 	if err != nil {
 		return z, fmt.Errorf("sysctl: %s", err)
 	}
-	bootTime, err := strconv.ParseInt(strings.TrimSpace(bootTimeStr), 10, 32)
+	bootTime, err := strconv.ParseInt(bootTimeStr[0], 10, 32)
 	if err != nil {
 		return z, fmt.Errorf("failed convert seconds to integer: %s", err)
 	}
 	return time.Duration(currentDate-bootTime) * time.Second, nil
 }
 
-func (s *RemoteStater) getHostname() (string, error) {
-	hostname, err := runCommand(s.client, "hostname")
+func (s *RemoteStater) getHostname(ctx context.Context) (string, error) {
+	hostname, err := runCommand(ctx, s.client, "hostname")
 	if err == nil {
-		return strings.TrimSpace(hostname), nil
+		return strings.TrimSpace(hostname[0]), nil
 	}
 	return "", fmt.Errorf("hostname: %s", err)
 }
 
-func (s *RemoteStater) getLoadInfo() (LoadInfo, error) {
-	line, err := runCommand(s.client, "cat /proc/loadavg")
+func (s *RemoteStater) getLoadInfo(ctx context.Context) (LoadInfo, error) {
+	lines, err := runCommand(ctx, s.client, "cat /proc/loadavg")
 	if err != nil {
-		return s.getLoadInfoBSD()
+		return s.getLoadInfoBSD(ctx)
 	}
-	parts := strings.Fields(line)
+	parts := strings.Fields(lines[0])
 	var l LoadInfo
 	if len(parts) < 5 {
 		return l, errors.New("inconsistent /proc/loadavg")
@@ -231,18 +250,18 @@ func (s *RemoteStater) getLoadInfo() (LoadInfo, error) {
 	return l, nil
 }
 
-func (s *RemoteStater) getLoadInfoBSD() (LoadInfo, error) {
+func (s *RemoteStater) getLoadInfoBSD(ctx context.Context) (LoadInfo, error) {
 	var l LoadInfo
-	uptimeLine, err := runCommand(s.client, "uptime")
+	uptimeLines, err := runCommand(ctx, s.client, "uptime")
 	if err != nil {
 		return l, fmt.Errorf("uptime: %s", err)
 	}
-	vmStatLine, err := runCommand(s.client, "vmstat")
+	vmStatLines, err := runCommand(ctx, s.client, "vmstat")
 	if err != nil {
 		return l, fmt.Errorf("vmstat: %s", err)
 	}
 
-	spl := strings.Split(strings.TrimSpace(uptimeLine), ":")
+	spl := strings.Split(uptimeLines[0], ":")
 	last := strings.TrimSpace(spl[len(spl)-1])
 	spl = strings.Split(last, ",")
 	if len(spl) < 3 {
@@ -252,9 +271,8 @@ func (s *RemoteStater) getLoadInfoBSD() (LoadInfo, error) {
 	l.Load5 = strings.TrimSpace(spl[1])
 	l.Load10 = strings.TrimSpace(spl[2])
 
-	vmStatLines := strings.Split(strings.TrimSpace(vmStatLine), "\n")
 	for _, line := range vmStatLines {
-		fields := strings.Fields(strings.TrimSpace(line))
+		fields := strings.Fields(line)
 		if len(fields) > 1 {
 			running, e1 := strconv.ParseInt(fields[0], 10, 32)
 			sleeping, e2 := strconv.ParseInt(fields[1], 10, 32)
@@ -268,21 +286,21 @@ func (s *RemoteStater) getLoadInfoBSD() (LoadInfo, error) {
 	return l, nil
 }
 
-func (s *RemoteStater) getMemInfoBSD() (MemInfo, error) {
+func (s *RemoteStater) getMemInfoBSD(ctx context.Context) (MemInfo, error) {
 	var m MemInfo
-	pm, err := runCommand(s.client, "sysctl -n hw.physmem")
+	pm, err := runCommand(ctx, s.client, "sysctl -n hw.physmem")
 	if err != nil {
 		return m, fmt.Errorf("sysctl: %s", err)
 	}
-	m.MemTotal, err = strconv.ParseUint(strings.TrimSpace(pm), 10, 64)
+	m.MemTotal, err = strconv.ParseUint(pm[0], 10, 64)
 	if err != nil {
 		return m, fmt.Errorf("inconsistent sysctl hw.physmem")
 	}
-	sw, err := runCommand(s.client, "swapctl -s -k")
+	sw, err := runCommand(ctx, s.client, "swapctl -s -k")
 	if err != nil {
 		return m, fmt.Errorf("swapctl: %s", err)
 	}
-	fields := strings.Fields(strings.TrimSpace(sw))
+	fields := strings.Fields(sw[0])
 	if len(fields) < 7 {
 		return m, errors.New("inconsistent swapctl: not enough fields")
 	}
@@ -297,14 +315,13 @@ func (s *RemoteStater) getMemInfoBSD() (MemInfo, error) {
 	}
 	m.SwapFree = m.SwapFree * 1024
 
-	vm, err := runCommand(s.client, "vmstat -s")
+	vmLines, err := runCommand(ctx, s.client, "vmstat -s")
 	if err != nil {
 		return m, fmt.Errorf("vmstat: %s", err)
 	}
-	lines := strings.Split(strings.TrimSpace(vm), "\n")
 	var active uint64
 	var bytesPerPage uint64
-	for _, line := range lines {
+	for _, line := range vmLines {
 		if strings.HasSuffix(line, "pages active") {
 			fields := strings.Fields(line)
 			if len(fields) > 0 {
@@ -322,16 +339,14 @@ func (s *RemoteStater) getMemInfoBSD() (MemInfo, error) {
 	return m, nil
 }
 
-func (s *RemoteStater) getMemInfo() (MemInfo, error) {
+func (s *RemoteStater) getMemInfo(ctx context.Context) (MemInfo, error) {
 	var m MemInfo
-	lines, err := runCommand(s.client, "cat /proc/meminfo")
+	lines, err := runCommand(ctx, s.client, "cat /proc/meminfo")
 	if err != nil {
-		return s.getMemInfoBSD()
+		return s.getMemInfoBSD(ctx)
 	}
 
-	scanner := bufio.NewScanner(strings.NewReader(lines))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		parts := strings.Fields(line)
 		if len(parts) == 3 {
 			val, err := strconv.ParseUint(parts[1], 10, 64)
@@ -341,13 +356,13 @@ func (s *RemoteStater) getMemInfo() (MemInfo, error) {
 			val *= 1024
 			switch parts[0] {
 			case "MemTotal:":
-				m.MemTotal = val * 1024
+				m.MemTotal = val
 			case "Active:":
-				m.MemActive = val * 1024
+				m.MemActive = val
 			case "SwapTotal:":
-				m.SwapTotal = val * 1024
+				m.SwapTotal = val
 			case "SwapFree:":
-				m.SwapFree = val * 1024
+				m.SwapFree = val
 			}
 		}
 	}
@@ -355,17 +370,15 @@ func (s *RemoteStater) getMemInfo() (MemInfo, error) {
 	return m, nil
 }
 
-func (s *RemoteStater) getFSInfos() ([]FSInfo, error) {
-	lines, err := runCommand(s.client, "BLOCKSIZE=1024 df")
+func (s *RemoteStater) getFSInfos(ctx context.Context) ([]FSInfo, error) {
+	lines, err := runCommand(ctx, s.client, "BLOCKSIZE=1024 df")
 	if err != nil {
 		return nil, fmt.Errorf("df: %s", err)
 	}
 	var fsinfos []FSInfo
 
-	scanner := bufio.NewScanner(strings.NewReader(lines))
 	flag := 0
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		parts := strings.Fields(line)
 		n := len(parts)
 		dev := n > 0 && strings.Index(parts[0], "/dev/") == 0
@@ -387,16 +400,18 @@ func (s *RemoteStater) getFSInfos() ([]FSInfo, error) {
 			})
 		}
 	}
+	sort.Slice(fsinfos, func(i, j int) bool {
+		return fsinfos[i].MountPoint < fsinfos[j].MountPoint
+	})
 
 	return fsinfos, nil
 }
 
-func (s *RemoteStater) getNetInfosBSD() ([]NetInfo, error) {
-	l, err := runCommand(s.client, "netstat -bin")
+func (s *RemoteStater) getNetInfosBSD(ctx context.Context) ([]NetInfo, error) {
+	lines, err := runCommand(ctx, s.client, "netstat -bin")
 	if err != nil {
 		return nil, fmt.Errorf("netstat: %s", err)
 	}
-	lines := strings.Split(strings.TrimSpace(l), "\n")
 	if len(lines) == 0 {
 		return nil, errors.New("inconsistent netstat")
 	}
@@ -435,23 +450,19 @@ func (s *RemoteStater) getNetInfosBSD() ([]NetInfo, error) {
 	return result, nil
 }
 
-func (s *RemoteStater) getNetInfos() ([]NetInfo, error) {
-	var lines string
-	var err error
-	lines, err = runCommand(s.client, "ip -o addr")
+func (s *RemoteStater) getNetInfos(ctx context.Context) ([]NetInfo, error) {
+	lines, err := runCommand(ctx, s.client, "ip -o addr")
 	if err != nil {
 		// try /sbin/ip
-		lines, err = runCommand(s.client, "/sbin/ip -o addr")
+		lines, err = runCommand(ctx, s.client, "/sbin/ip -o addr")
 		if err != nil {
-			return s.getNetInfosBSD()
+			return s.getNetInfosBSD(ctx)
 		}
 	}
 
 	netinfos := make(map[string]*NetInfo)
 
-	scanner := bufio.NewScanner(strings.NewReader(lines))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		parts := strings.Fields(line)
 		if len(parts) >= 4 && (parts[2] == "inet" || parts[2] == "inet6") {
 			ipv4 := parts[2] == "inet"
@@ -467,14 +478,12 @@ func (s *RemoteStater) getNetInfos() ([]NetInfo, error) {
 		}
 	}
 
-	lines, err = runCommand(s.client, "cat /proc/net/dev")
+	lines, err = runCommand(ctx, s.client, "cat /proc/net/dev")
 	if err != nil {
 		return nil, fmt.Errorf("cat /proc/net/dev: %s", err)
 	}
 
-	scanner = bufio.NewScanner(strings.NewReader(lines))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		parts := strings.Fields(line)
 		if len(parts) == 17 {
 			name := strings.TrimSpace(parts[0])
@@ -497,6 +506,9 @@ func (s *RemoteStater) getNetInfos() ([]NetInfo, error) {
 	for _, v := range netinfos {
 		result = append(result, *v)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
 	return result, nil
 }
 
@@ -532,13 +544,12 @@ func parseCPUFields(fields []string) cpuRaw {
 	return s
 }
 
-func (s *RemoteStater) getCPUInfoBSD() (CPUInfo, error) {
+func (s *RemoteStater) getCPUInfoBSD(ctx context.Context) (CPUInfo, error) {
 	var cpu CPUInfo
-	vm, err := runCommand(s.client, "vmstat")
+	lines, err := runCommand(ctx, s.client, "vmstat")
 	if err != nil {
 		return cpu, fmt.Errorf("vmstat: %s", err)
 	}
-	lines := strings.Split(strings.TrimSpace(vm), "\n")
 	if len(lines) < 3 {
 		return cpu, errors.New("inconsistent vmstat: number of lines")
 	}
@@ -561,18 +572,16 @@ func (s *RemoteStater) getCPUInfoBSD() (CPUInfo, error) {
 	return cpu, nil
 }
 
-func (s *RemoteStater) getCPUInfo() (CPUInfo, error) {
+func (s *RemoteStater) getCPUInfo(ctx context.Context) (CPUInfo, error) {
 	var cpu CPUInfo
-	lines, err := runCommand(s.client, "cat /proc/stat")
+	lines, err := runCommand(ctx, s.client, "cat /proc/stat")
 	if err != nil {
-		return s.getCPUInfoBSD()
+		return s.getCPUInfoBSD(ctx)
 	}
 
 	var nowCPU cpuRaw
 
-	scanner := bufio.NewScanner(strings.NewReader(lines))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range lines {
 		fields := strings.Fields(line)
 		if len(fields) > 0 && fields[0] == "cpu" { // changing here if want to get every cpu-core's stats
 			nowCPU = parseCPUFields(fields)
