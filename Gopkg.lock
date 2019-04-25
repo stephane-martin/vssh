@@ -506,7 +506,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e06587ae8f718230401e544795b1c3947fa036ebb738d99420beeb1559ce8700"
+  digest = "1:5696c8f58d08a348d7962e2f8422880eceadfbf29bd26f25799e2aab11d53035"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -516,6 +516,7 @@
     "internal/subtle",
     "poly1305",
     "ssh",
+    "ssh/agent",
     "ssh/knownhosts",
     "ssh/terminal",
   ]
@@ -622,7 +623,9 @@
     "go.uber.org/zap/zapcore",
     "golang.org/x/crypto/ed25519",
     "golang.org/x/crypto/ssh",
+    "golang.org/x/crypto/ssh/agent",
     "golang.org/x/crypto/ssh/terminal",
+    "golang.org/x/sync/errgroup",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

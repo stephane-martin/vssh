@@ -78,6 +78,10 @@
   name = "github.com/stephane-martin/go-mimeapps"
   branch = "master"
 
+[[constraint]]
+  name = "golang.org/x/sync"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true
