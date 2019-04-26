@@ -133,6 +133,7 @@ func sftpCommand() cli.Command {
 				"pwd", "lpwd",
 				"rename",
 				"rm", "lrm", "rmdir", "lrmdir",
+				"browse",
 				"exit", "logout",
 				"help",
 			}

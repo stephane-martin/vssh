@@ -82,6 +82,10 @@
   name = "golang.org/x/sync"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/gorilla/handlers"
+  version = "1.4.0"
+
 [prune]
   go-tests = true
   unused-packages = true

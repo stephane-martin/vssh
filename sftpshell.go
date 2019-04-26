@@ -1,25 +1,31 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/gdamore/tcell"
 	"github.com/mattn/go-shellwords"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/sftp"
+	"github.com/rivo/tview"
 	"github.com/scylladb/go-set/strset"
 	"github.com/stephane-martin/go-mimeapps"
 	"github.com/stephane-martin/vssh/lib"
 	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/sync/errgroup"
 )
 
 type only int
@@ -100,6 +106,7 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"rmdir":     s.rmdir,
 		"lrmdir":    s.lrmdir,
 		"rename":    s.rename,
+		"browse":    s.browse,
 	}
 	s.completes = map[string]cmpl{
 		"cd":     s.completeCd,
@@ -219,6 +226,68 @@ func (s *shellstate) list(args []string, flags *strset.Set) error {
 
 func (s *shellstate) llist(args []string, flags *strset.Set) error {
 	return _list(s.LocalWD, nil, flags, s.out)
+}
+
+func (s *shellstate) browse(args []string, flags *strset.Set) error {
+	addr := "127.0.0.1:8080"
+	if len(args) > 0 {
+		_, _, err := net.SplitHostPort(args[0])
+		if err != nil {
+			return fmt.Errorf("failed to parse HTTP listen address: %s", err)
+		}
+		addr = args[0]
+	}
+	tv := tview.NewTextView()
+	tv.SetBorder(true)
+	tv.SetDynamicColors(true)
+	tv.SetTitle(fmt.Sprintf(" browsing: %s ", s.RemoteWD))
+	tv.SetTitleColor(tcell.ColorBlue)
+	tv.SetBorderPadding(1, 1, 1, 1)
+	app := tview.NewApplication().SetRoot(tv, true)
+	ctx := context.Background()
+	g, lctx := errgroup.WithContext(ctx)
+
+	pr, pw := io.Pipe()
+	r := bufio.NewReader(pr)
+
+	g.Go(func() error {
+		for {
+			line, err := r.ReadBytes('\n')
+			if len(line) > 0 {
+				_, _ = tv.Write(line)
+				app.Draw()
+			}
+			if err != nil {
+				return err
+			}
+		}
+	})
+
+	g.Go(func() error {
+		err := browseDir(lctx, s.client, addr, s.RemoteWD, pw)
+		_ = pw.Close()
+		return err
+	})
+
+	g.Go(func() error {
+		err := app.Run()
+		if err == nil {
+			return context.Canceled
+		}
+		return err
+	})
+
+	g.Go(func() error {
+		<-lctx.Done()
+		app.Stop()
+		return context.Canceled
+	})
+
+	err := g.Wait()
+	if err == context.Canceled {
+		return nil
+	}
+	return err
 }
 
 func (s *shellstate) rename(args []string, flags *strset.Set) error {
