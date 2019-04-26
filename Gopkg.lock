@@ -80,6 +80,14 @@
   version = "v0.15.0"
 
 [[projects]]
+  digest = "1:d219400f09c151f0ada918bab650ef46f7ebdb1ff4fea923fdcb839481ec7ec1"
+  name = "github.com/cheggaaa/pb"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "f907f6f5dd81f77c2bbc1cde92e4c5a04720cb11"
+  version = "v1.0.28"
+
+[[projects]]
   branch = "master"
   digest = "1:710109527a119c813d4fac773712dd92f449ed7c2f7b81f49822f94d290c8f72"
   name = "github.com/danwakefield/fnmatch"
@@ -606,6 +614,7 @@
     "github.com/alecthomas/chroma/lexers",
     "github.com/alecthomas/chroma/styles",
     "github.com/awnumar/memguard",
+    "github.com/cheggaaa/pb",
     "github.com/gabriel-vasile/mimetype",
     "github.com/gdamore/tcell",
     "github.com/google/gops/agent",

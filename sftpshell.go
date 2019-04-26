@@ -15,7 +15,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/cheggaaa/pb"
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-shellwords"
 	"github.com/mitchellh/go-homedir"
@@ -228,6 +230,8 @@ func (s *shellstate) llist(args []string, flags *strset.Set) error {
 	return _list(s.LocalWD, nil, flags, s.out)
 }
 
+var spinner = []rune("◐◓◑◒")
+
 func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	addr := "127.0.0.1:8080"
 	if len(args) > 0 {
@@ -240,7 +244,8 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	tv := tview.NewTextView()
 	tv.SetBorder(true)
 	tv.SetDynamicColors(true)
-	tv.SetTitle(fmt.Sprintf(" browsing: %s ", s.RemoteWD))
+	title := fmt.Sprintf(" browsing: %s %%s ", s.RemoteWD)
+	tv.SetTitle(fmt.Sprintf(title, string(spinner[0])))
 	tv.SetTitleColor(tcell.ColorBlue)
 	tv.SetBorderPadding(1, 1, 1, 1)
 	app := tview.NewApplication().SetRoot(tv, true)
@@ -281,6 +286,22 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 		<-lctx.Done()
 		app.Stop()
 		return context.Canceled
+	})
+
+	g.Go(func() error {
+		var i int
+		l := len(spinner)
+		for {
+			select {
+			case <-time.After(time.Second):
+				i++
+				app.QueueUpdateDraw(func() {
+					tv.SetTitle(fmt.Sprintf(title, string(spinner[i%l])))
+				})
+			case <-lctx.Done():
+				return context.Canceled
+			}
+		}
 	})
 
 	err := g.Wait()
@@ -529,6 +550,10 @@ func (s *shellstate) getfile(targetLocalDir, remoteFile string) error {
 		return err
 	}
 	defer func() { _ = source.Close() }()
+	stats, err := source.Stat()
+	if err != nil {
+		return err
+	}
 
 	localFilename := join(targetLocalDir, base(remoteFile))
 	dest, err := os.Create(localFilename)
@@ -536,7 +561,10 @@ func (s *shellstate) getfile(targetLocalDir, remoteFile string) error {
 		return err
 	}
 	defer func() { _ = dest.Close() }()
-	_, err = io.Copy(dest, source)
+	s.info("download: %s", remoteFile)
+	bar := newBar(stats.Size())
+	_, err = io.Copy(dest, bar.NewProxyReader(source))
+	bar.Finish()
 	if err != nil {
 		return err
 	}
@@ -617,6 +645,15 @@ func (s *shellstate) put(args []string, flags *strset.Set) error {
 	return nil
 }
 
+func newBar(size int64) *pb.ProgressBar {
+	bar := pb.New(int(size)).SetUnits(pb.U_BYTES).SetRefreshRate(time.Second).SetMaxWidth(72)
+	bar.ShowElapsedTime = false
+	bar.ShowFinalTime = false
+	bar.ShowTimeLeft = false
+	bar.Start()
+	return bar
+}
+
 func (s *shellstate) putfile(targetRemoteDir string, localFile string) error {
 	remoteFilename := join(targetRemoteDir, base(localFile))
 	source, err := os.Open(localFile)
@@ -624,12 +661,19 @@ func (s *shellstate) putfile(targetRemoteDir string, localFile string) error {
 		return err
 	}
 	defer func() { _ = source.Close() }()
+	stats, err := source.Stat()
+	if err != nil {
+		return err
+	}
 	dest, err := s.client.Create(remoteFilename)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = dest.Close() }()
-	_, err = io.Copy(dest, source)
+	s.info("uploading: %s", localFile)
+	bar := newBar(stats.Size())
+	_, err = io.Copy(dest, bar.NewProxyReader(source))
+	bar.Finish()
 	if err != nil {
 		return err
 	}
@@ -647,6 +691,7 @@ func (s *shellstate) putdir(targetRemoteDir, localDir string) error {
 	if err != nil && !os.IsExist(err) {
 		return err
 	}
+	s.info("upload: %s", localDir)
 
 	for _, f := range files {
 		fname := join(localDir, f.Name())
