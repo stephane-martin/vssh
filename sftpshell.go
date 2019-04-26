@@ -256,6 +256,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	r := bufio.NewReader(pr)
 
 	g.Go(func() error {
+		io.WriteString(tv, fmt.Sprintf("Serve SFTP files from [blue]%s[-] on [blue]%s[-]", s.RemoteWD, addr))
 		for {
 			line, err := r.ReadBytes('\n')
 			if len(line) > 0 {

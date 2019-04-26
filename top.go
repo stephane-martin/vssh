@@ -118,7 +118,10 @@ func topAction(clictx *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-	stater := NewStater(client)
+	stater, err := NewStater(client)
+	if err != nil {
+		return err
+	}
 	stats := make(chan Stats)
 	g, lctx := errgroup.WithContext(ctx)
 

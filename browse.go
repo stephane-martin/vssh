@@ -42,6 +42,7 @@ func (f *sftpFile) Close() error {
 }
 
 func (f *sftpFile) Readdir() ([]os.FileInfo, error) {
+	f.out.Print("List SFTP directory [blue]%s[-]", f.remotePath)
 	return f.client.ReadDir(f.remotePath)
 }
 
@@ -55,6 +56,7 @@ func (fs *sftpFS) Open(name string) (*sftpFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	fs.out.Print("Open SFTP file [blue]%s[-]", remotePath)
 	return &sftpFile{
 		remotePath: remotePath,
 		remoteFile: remoteFile,
@@ -116,8 +118,8 @@ func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string,
 func dirList(w http.ResponseWriter, r *http.Request, f *sftpFile) {
 	dirs, err := f.Readdir()
 	if err != nil {
-		//logf(r, "http: error reading directory: %v", err)
-		//Error(w, "Error reading directory", StatusInternalServerError)
+		f.out.Print("[red]http: error reading directory: %v[-]", err)
+		http.Error(w, "Error reading directory", http.StatusInternalServerError)
 		return
 	}
 	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name() < dirs[j].Name() })
@@ -161,16 +163,16 @@ func serveFile(w http.ResponseWriter, r *http.Request, fs *sftpFS, name string, 
 
 	f, err := fs.Open(name)
 	if err != nil {
-		//msg, code := toHTTPError(err)
-		//Error(w, msg, code)
+		msg, code := toHTTPError(err)
+		http.Error(w, msg, code)
 		return
 	}
 	defer f.Close()
 
 	d, err := f.Stat()
 	if err != nil {
-		//msg, code := toHTTPError(err)
-		//Error(w, msg, code)
+		msg, code := toHTTPError(err)
+		http.Error(w, msg, code)
 		return
 	}
 
@@ -257,4 +259,14 @@ func serveContent(w http.ResponseWriter, r *http.Request, name string, modtime t
 	if r.Method != "HEAD" {
 		_, _ = io.CopyN(w, content, size)
 	}
+}
+
+func toHTTPError(err error) (msg string, httpStatus int) {
+	if os.IsNotExist(err) {
+		return "404 page not found", http.StatusNotFound
+	}
+	if os.IsPermission(err) {
+		return "403 Forbidden", http.StatusForbidden
+	}
+	return "500 Internal Server Error", http.StatusInternalServerError
 }

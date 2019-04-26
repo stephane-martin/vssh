@@ -93,9 +93,13 @@ type CPUInfo struct {
 	Guest   float32
 }
 
-type RemoteStater struct {
+type LinuxStater struct {
 	client *ssh.Client
 	preCPU cpuRaw
+}
+
+type OpenBSDStater struct {
+	client *ssh.Client
 }
 
 type LoadInfo struct {
@@ -123,8 +127,23 @@ type Stats struct {
 	CPU      CPUInfo // or []CPUInfo to get all the cpu-core's stats?
 }
 
-func NewStater(client *ssh.Client) *RemoteStater {
-	return &RemoteStater{client: client}
+type Stater interface {
+	Get(context.Context) (Stats, error)
+}
+
+func NewStater(client *ssh.Client) (Stater, error) {
+	lines, err := runCommand(context.Background(), client, "uname -s")
+	if err != nil {
+		return nil, err
+	}
+	line := strings.ToLower(lines[0])
+	if line == "linux" {
+		return &LinuxStater{client: client}, nil
+	}
+	if line == "openbsd" {
+		return &OpenBSDStater{client: client}, nil
+	}
+	return nil, fmt.Errorf("unsupported OS: %s", line)
 }
 
 type Merror struct {
@@ -165,7 +184,20 @@ func (e *Merror) IsZero() bool {
 	return false
 }
 
-func (s *RemoteStater) Get(ctx context.Context) (Stats, error) {
+func (e *Merror) IsCanceled() bool {
+	return e.Uptime == context.Canceled || e.Hostname == context.Canceled ||
+		e.Load == context.Canceled || e.Mem == context.Canceled ||
+		e.FS == context.Canceled || e.Net == context.Canceled || e.CPU == context.Canceled
+}
+
+func errorf(s string, err error) error {
+	if err == context.Canceled {
+		return context.Canceled
+	}
+	return fmt.Errorf(s, err)
+}
+
+func (s *LinuxStater) Get(ctx context.Context) (Stats, error) {
 	var stats Stats
 	var merr Merror
 	stats.Uptime, merr.Uptime = s.getUptime(ctx)
@@ -178,15 +210,37 @@ func (s *RemoteStater) Get(ctx context.Context) (Stats, error) {
 	if merr.IsZero() {
 		return stats, nil
 	}
+	if merr.IsCanceled() {
+		return stats, context.Canceled
+	}
+	return stats, &merr
+}
+
+func (s *OpenBSDStater) Get(ctx context.Context) (Stats, error) {
+	var stats Stats
+	var merr Merror
+	stats.Uptime, merr.Uptime = s.getUptime(ctx)
+	stats.Hostname, merr.Hostname = s.getHostname(ctx)
+	stats.Load, merr.Load = s.getLoadInfo(ctx)
+	stats.Mem, merr.Mem = s.getMemInfo(ctx)
+	stats.FS, merr.FS = s.getFSInfos(ctx)
+	stats.Net, merr.Net = s.getNetInfos(ctx)
+	stats.CPU, merr.CPU = s.getCPUInfo(ctx)
+	if merr.IsZero() {
+		return stats, nil
+	}
+	if merr.IsCanceled() {
+		return stats, context.Canceled
+	}
 	return stats, &merr
 }
 
 var z time.Duration
 
-func (s *RemoteStater) getUptime(ctx context.Context) (time.Duration, error) {
-	uptime, err := runCommand(ctx, s.client, "/bin/cat /proc/uptime")
+func (s *LinuxStater) getUptime(ctx context.Context) (time.Duration, error) {
+	uptime, err := runCommand(ctx, s.client, "cat /proc/uptime")
 	if err != nil {
-		return s.getUptimeBSD(ctx)
+		return z, errorf("cat /proc/uptime: %s", err)
 	}
 
 	parts := strings.Fields(uptime[0])
@@ -200,41 +254,49 @@ func (s *RemoteStater) getUptime(ctx context.Context) (time.Duration, error) {
 	return time.Duration(upsecs * float64(time.Second)), nil
 }
 
-func (s *RemoteStater) getUptimeBSD(ctx context.Context) (time.Duration, error) {
+func (s *OpenBSDStater) getUptime(ctx context.Context) (time.Duration, error) {
 	currentDateStr, err := runCommand(ctx, s.client, "date +%s")
 	if err != nil {
-		return z, fmt.Errorf("date: %s", err)
+		return z, errorf("date: %s", err)
 	}
 	currentDate, err := strconv.ParseInt(currentDateStr[0], 10, 32)
 	if err != nil {
-		return z, fmt.Errorf("failed convert seconds to integer: %s", err)
+		return z, errorf("failed convert seconds to integer: %s", err)
 	}
 	bootTimeStr, err := runCommand(ctx, s.client, "sysctl -n kern.boottime")
 	if err != nil {
-		return z, fmt.Errorf("sysctl: %s", err)
+		return z, errorf("sysctl: %s", err)
 	}
 	bootTime, err := strconv.ParseInt(bootTimeStr[0], 10, 32)
 	if err != nil {
-		return z, fmt.Errorf("failed convert seconds to integer: %s", err)
+		return z, errorf("failed convert seconds to integer: %s", err)
 	}
 	return time.Duration(currentDate-bootTime) * time.Second, nil
 }
 
-func (s *RemoteStater) getHostname(ctx context.Context) (string, error) {
+func (s *LinuxStater) getHostname(ctx context.Context) (string, error) {
 	hostname, err := runCommand(ctx, s.client, "hostname")
 	if err == nil {
 		return strings.TrimSpace(hostname[0]), nil
 	}
-	return "", fmt.Errorf("hostname: %s", err)
+	return "", errorf("hostname: %s", err)
 }
 
-func (s *RemoteStater) getLoadInfo(ctx context.Context) (LoadInfo, error) {
+func (s *OpenBSDStater) getHostname(ctx context.Context) (string, error) {
+	hostname, err := runCommand(ctx, s.client, "hostname")
+	if err == nil {
+		return strings.TrimSpace(hostname[0]), nil
+	}
+	return "", errorf("hostname: %s", err)
+}
+
+func (s *LinuxStater) getLoadInfo(ctx context.Context) (LoadInfo, error) {
+	var l LoadInfo
 	lines, err := runCommand(ctx, s.client, "cat /proc/loadavg")
 	if err != nil {
-		return s.getLoadInfoBSD(ctx)
+		return l, errorf("cat /proc/loadavg: %s", err)
 	}
 	parts := strings.Fields(lines[0])
-	var l LoadInfo
 	if len(parts) < 5 {
 		return l, errors.New("inconsistent /proc/loadavg")
 	}
@@ -250,15 +312,15 @@ func (s *RemoteStater) getLoadInfo(ctx context.Context) (LoadInfo, error) {
 	return l, nil
 }
 
-func (s *RemoteStater) getLoadInfoBSD(ctx context.Context) (LoadInfo, error) {
+func (s *OpenBSDStater) getLoadInfo(ctx context.Context) (LoadInfo, error) {
 	var l LoadInfo
 	uptimeLines, err := runCommand(ctx, s.client, "uptime")
 	if err != nil {
-		return l, fmt.Errorf("uptime: %s", err)
+		return l, errorf("uptime: %s", err)
 	}
 	vmStatLines, err := runCommand(ctx, s.client, "vmstat")
 	if err != nil {
-		return l, fmt.Errorf("vmstat: %s", err)
+		return l, errorf("vmstat: %s", err)
 	}
 
 	spl := strings.Split(uptimeLines[0], ":")
@@ -286,19 +348,19 @@ func (s *RemoteStater) getLoadInfoBSD(ctx context.Context) (LoadInfo, error) {
 	return l, nil
 }
 
-func (s *RemoteStater) getMemInfoBSD(ctx context.Context) (MemInfo, error) {
+func (s *OpenBSDStater) getMemInfo(ctx context.Context) (MemInfo, error) {
 	var m MemInfo
 	pm, err := runCommand(ctx, s.client, "sysctl -n hw.physmem")
 	if err != nil {
-		return m, fmt.Errorf("sysctl: %s", err)
+		return m, errorf("sysctl: %s", err)
 	}
 	m.MemTotal, err = strconv.ParseUint(pm[0], 10, 64)
 	if err != nil {
-		return m, fmt.Errorf("inconsistent sysctl hw.physmem")
+		return m, errors.New("inconsistent sysctl hw.physmem")
 	}
 	sw, err := runCommand(ctx, s.client, "swapctl -s -k")
 	if err != nil {
-		return m, fmt.Errorf("swapctl: %s", err)
+		return m, errorf("swapctl: %s", err)
 	}
 	fields := strings.Fields(sw[0])
 	if len(fields) < 7 {
@@ -317,7 +379,7 @@ func (s *RemoteStater) getMemInfoBSD(ctx context.Context) (MemInfo, error) {
 
 	vmLines, err := runCommand(ctx, s.client, "vmstat -s")
 	if err != nil {
-		return m, fmt.Errorf("vmstat: %s", err)
+		return m, errorf("vmstat: %s", err)
 	}
 	var active uint64
 	var bytesPerPage uint64
@@ -339,11 +401,11 @@ func (s *RemoteStater) getMemInfoBSD(ctx context.Context) (MemInfo, error) {
 	return m, nil
 }
 
-func (s *RemoteStater) getMemInfo(ctx context.Context) (MemInfo, error) {
+func (s *LinuxStater) getMemInfo(ctx context.Context) (MemInfo, error) {
 	var m MemInfo
 	lines, err := runCommand(ctx, s.client, "cat /proc/meminfo")
 	if err != nil {
-		return s.getMemInfoBSD(ctx)
+		return m, errorf("cat /proc/meminfo: %s", err)
 	}
 
 	for _, line := range lines {
@@ -370,10 +432,18 @@ func (s *RemoteStater) getMemInfo(ctx context.Context) (MemInfo, error) {
 	return m, nil
 }
 
-func (s *RemoteStater) getFSInfos(ctx context.Context) ([]FSInfo, error) {
-	lines, err := runCommand(ctx, s.client, "BLOCKSIZE=1024 df")
+func (s *LinuxStater) getFSInfos(ctx context.Context) ([]FSInfo, error) {
+	return getFSInfos(ctx, s.client)
+}
+
+func (s *OpenBSDStater) getFSInfos(ctx context.Context) ([]FSInfo, error) {
+	return getFSInfos(ctx, s.client)
+}
+
+func getFSInfos(ctx context.Context, client *ssh.Client) ([]FSInfo, error) {
+	lines, err := runCommand(ctx, client, "BLOCKSIZE=1024 df")
 	if err != nil {
-		return nil, fmt.Errorf("df: %s", err)
+		return nil, errorf("df: %s", err)
 	}
 	var fsinfos []FSInfo
 
@@ -407,10 +477,10 @@ func (s *RemoteStater) getFSInfos(ctx context.Context) ([]FSInfo, error) {
 	return fsinfos, nil
 }
 
-func (s *RemoteStater) getNetInfosBSD(ctx context.Context) ([]NetInfo, error) {
+func (s *OpenBSDStater) getNetInfos(ctx context.Context) ([]NetInfo, error) {
 	lines, err := runCommand(ctx, s.client, "netstat -bin")
 	if err != nil {
-		return nil, fmt.Errorf("netstat: %s", err)
+		return nil, errorf("netstat: %s", err)
 	}
 	if len(lines) == 0 {
 		return nil, errors.New("inconsistent netstat")
@@ -450,13 +520,13 @@ func (s *RemoteStater) getNetInfosBSD(ctx context.Context) ([]NetInfo, error) {
 	return result, nil
 }
 
-func (s *RemoteStater) getNetInfos(ctx context.Context) ([]NetInfo, error) {
+func (s *LinuxStater) getNetInfos(ctx context.Context) ([]NetInfo, error) {
 	lines, err := runCommand(ctx, s.client, "ip -o addr")
 	if err != nil {
 		// try /sbin/ip
 		lines, err = runCommand(ctx, s.client, "/sbin/ip -o addr")
 		if err != nil {
-			return s.getNetInfosBSD(ctx)
+			return nil, errorf("ip -o addr: %s", err)
 		}
 	}
 
@@ -480,7 +550,7 @@ func (s *RemoteStater) getNetInfos(ctx context.Context) ([]NetInfo, error) {
 
 	lines, err = runCommand(ctx, s.client, "cat /proc/net/dev")
 	if err != nil {
-		return nil, fmt.Errorf("cat /proc/net/dev: %s", err)
+		return nil, errorf("cat /proc/net/dev: %s", err)
 	}
 
 	for _, line := range lines {
@@ -544,11 +614,11 @@ func parseCPUFields(fields []string) cpuRaw {
 	return s
 }
 
-func (s *RemoteStater) getCPUInfoBSD(ctx context.Context) (CPUInfo, error) {
+func (s *OpenBSDStater) getCPUInfo(ctx context.Context) (CPUInfo, error) {
 	var cpu CPUInfo
 	lines, err := runCommand(ctx, s.client, "vmstat")
 	if err != nil {
-		return cpu, fmt.Errorf("vmstat: %s", err)
+		return cpu, errorf("vmstat: %s", err)
 	}
 	if len(lines) < 3 {
 		return cpu, errors.New("inconsistent vmstat: number of lines")
@@ -572,11 +642,11 @@ func (s *RemoteStater) getCPUInfoBSD(ctx context.Context) (CPUInfo, error) {
 	return cpu, nil
 }
 
-func (s *RemoteStater) getCPUInfo(ctx context.Context) (CPUInfo, error) {
+func (s *LinuxStater) getCPUInfo(ctx context.Context) (CPUInfo, error) {
 	var cpu CPUInfo
 	lines, err := runCommand(ctx, s.client, "cat /proc/stat")
 	if err != nil {
-		return s.getCPUInfoBSD(ctx)
+		return cpu, errorf("cat /proc/stat: %s", err)
 	}
 
 	var nowCPU cpuRaw
