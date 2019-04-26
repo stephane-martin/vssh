@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,42 +28,20 @@ type sftpFS struct {
 
 type sftpFile struct {
 	remotePath string
-	tmpPath    string
 	remoteFile *sftp.File
-	tmpFile    *os.File
 	client     *sftp.Client
 	out        *logWriter
 }
 
 func (f *sftpFile) Read(p []byte) (n int, err error) {
-	if f.tmpFile == nil {
-		return 0, fmt.Errorf("is a directory: %s", f.remotePath)
-	}
-	return f.tmpFile.Read(p)
+	return f.remoteFile.Read(p)
 }
 
 func (f *sftpFile) Close() error {
-	var err error
-	if f.tmpFile != nil {
-		err = f.tmpFile.Close()
-	}
-	_ = f.remoteFile.Close()
-	if f.tmpPath != "" {
-		_ = os.Remove(f.tmpPath)
-		_ = os.RemoveAll(filepath.Dir(f.tmpPath))
-	}
-	return err
+	return f.remoteFile.Close()
 }
 
-func (f *sftpFile) Seek(offset int64, whence int) (int64, error) {
-	if f.tmpFile == nil {
-		return 0, fmt.Errorf("is a directory: %s", f.remotePath)
-	}
-	return f.tmpFile.Seek(offset, whence)
-}
-
-func (f *sftpFile) Readdir(count int) ([]os.FileInfo, error) {
-	//fmt.Println("readdir", count, f.remotePath)
+func (f *sftpFile) Readdir() ([]os.FileInfo, error) {
 	return f.client.ReadDir(f.remotePath)
 }
 
@@ -67,65 +49,15 @@ func (f *sftpFile) Stat() (os.FileInfo, error) {
 	return f.remoteFile.Stat()
 }
 
-func (fs *sftpFS) Open(name string) (http.File, error) {
+func (fs *sftpFS) Open(name string) (*sftpFile, error) {
 	remotePath := filepath.Join(fs.wd, path.Clean("/"+name))
 	remoteFile, err := fs.client.Open(remotePath)
 	if err != nil {
 		return nil, err
 	}
-	stats, err := remoteFile.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if stats.IsDir() {
-		return &sftpFile{
-			remotePath: remotePath,
-			tmpPath:    "",
-			remoteFile: remoteFile,
-			tmpFile:    nil,
-			client:     fs.client,
-			out:        fs.out,
-		}, nil
-	}
-	tmpDir, err := ioutil.TempDir("", "vssh-http-tempfile")
-	if err != nil {
-		_ = remoteFile.Close()
-		return nil, err
-	}
-	tmpPath := filepath.Join(tmpDir, filepath.Base(remotePath))
-	fs.out.Print("Open [blue]%s[-]: download [blue]%s[-] to [blue]%s[-]", name, remotePath, tmpPath)
-	tmpFile, err := os.Create(tmpPath)
-	if err != nil {
-		_ = remoteFile.Close()
-		_ = os.RemoveAll(tmpDir)
-		return nil, err
-	}
-	clean := func() {
-		_ = tmpFile.Close()
-		_ = remoteFile.Close()
-		_ = os.Remove(tmpPath)
-		_ = os.RemoveAll(tmpDir)
-	}
-	_, err = io.Copy(tmpFile, remoteFile)
-	if err != nil {
-		clean()
-		return nil, err
-	}
-	_, err = tmpFile.Seek(0, 0)
-	if err != nil {
-		clean()
-		return nil, err
-	}
-	err = os.Chtimes(tmpPath, time.Now(), stats.ModTime())
-	if err != nil {
-		clean()
-		return nil, err
-	}
 	return &sftpFile{
 		remotePath: remotePath,
 		remoteFile: remoteFile,
-		tmpPath:    tmpPath,
-		tmpFile:    tmpFile,
 		client:     fs.client,
 		out:        fs.out,
 	}, nil
@@ -156,8 +88,14 @@ func (w *logWriter) Print(s string, args ...interface{}) (int, error) {
 func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string, out io.Writer) error {
 	logOut := &logWriter{out: out}
 	fs := &sftpFS{wd: wd, client: client, out: logOut}
-	h := http.FileServer(fs)
-	h = stripModifiedHeader(h)
+	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upath := r.URL.Path
+		if !strings.HasPrefix(upath, "/") {
+			upath = "/" + upath
+			r.URL.Path = upath
+		}
+		serveFile(w, r, fs, path.Clean(upath), true)
+	})
 	h = LoggingHandler(logOut, h)
 	server := &http.Server{
 		Addr:     addr,
@@ -175,10 +113,148 @@ func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string,
 	return err
 }
 
-func stripModifiedHeader(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.Header.Del("If-Modified-Since")
-		r.Header.Del("If-Unmodified-Since")
-		h.ServeHTTP(w, r)
-	})
+func dirList(w http.ResponseWriter, r *http.Request, f *sftpFile) {
+	dirs, err := f.Readdir()
+	if err != nil {
+		//logf(r, "http: error reading directory: %v", err)
+		//Error(w, "Error reading directory", StatusInternalServerError)
+		return
+	}
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name() < dirs[j].Name() })
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, "<pre>\n")
+	for _, d := range dirs {
+		name := d.Name()
+		if d.IsDir() {
+			name += "/"
+		}
+		// name may contain '?' or '#', which must be escaped to remain
+		// part of the URL path, and not indicate the start of a query
+		// string or fragment.
+		url := url.URL{Path: name}
+		fmt.Fprintf(w, "<a href=\"%s\">%s</a>\n", url.String(), htmlReplacer.Replace(name))
+	}
+	fmt.Fprintf(w, "</pre>\n")
+}
+
+var htmlReplacer = strings.NewReplacer(
+	"&", "&amp;",
+	"<", "&lt;",
+	">", "&gt;",
+	// "&#34;" is shorter than "&quot;".
+	`"`, "&#34;",
+	// "&#39;" is shorter than "&apos;" and apos was not in HTML until HTML5.
+	"'", "&#39;",
+)
+
+func serveFile(w http.ResponseWriter, r *http.Request, fs *sftpFS, name string, redirect bool) {
+	const indexPage = "/index.html"
+
+	// redirect .../index.html to .../
+	// can't use Redirect() because that would make the path absolute,
+	// which would be a problem running under StripPrefix
+	if strings.HasSuffix(r.URL.Path, indexPage) {
+		localRedirect(w, r, "./")
+		return
+	}
+
+	f, err := fs.Open(name)
+	if err != nil {
+		//msg, code := toHTTPError(err)
+		//Error(w, msg, code)
+		return
+	}
+	defer f.Close()
+
+	d, err := f.Stat()
+	if err != nil {
+		//msg, code := toHTTPError(err)
+		//Error(w, msg, code)
+		return
+	}
+
+	if redirect {
+		// redirect to canonical path: / at end of directory url
+		// r.URL.Path always begins with /
+		url := r.URL.Path
+		if d.IsDir() {
+			if url[len(url)-1] != '/' {
+				localRedirect(w, r, path.Base(url)+"/")
+				return
+			}
+		} else {
+			if url[len(url)-1] == '/' {
+				localRedirect(w, r, "../"+path.Base(url))
+				return
+			}
+		}
+	}
+
+	// redirect if the directory name doesn't end in a slash
+	if d.IsDir() {
+		url := r.URL.Path
+		if url[len(url)-1] != '/' {
+			localRedirect(w, r, path.Base(url)+"/")
+			return
+		}
+	}
+
+	// use contents of index.html for directory, if present
+	if d.IsDir() {
+		index := strings.TrimSuffix(name, "/") + indexPage
+		ff, err := fs.Open(index)
+		if err == nil {
+			defer ff.Close()
+			dd, err := ff.Stat()
+			if err == nil {
+				d = dd
+				f = ff
+			}
+		}
+	}
+
+	// Still a directory? (we didn't find an index.html file)
+	if d.IsDir() {
+		dirList(w, r, f)
+		return
+	}
+
+	// serveContent will check modification time
+	sizeFunc := func() (int64, error) { return d.Size(), nil }
+	serveContent(w, r, d.Name(), d.ModTime(), sizeFunc, f)
+}
+
+func localRedirect(w http.ResponseWriter, r *http.Request, newPath string) {
+	if q := r.URL.RawQuery; q != "" {
+		newPath += "?" + q
+	}
+	w.Header().Set("Location", newPath)
+	w.WriteHeader(http.StatusMovedPermanently)
+}
+
+func serveContent(w http.ResponseWriter, r *http.Request, name string, modtime time.Time, sizeFunc func() (int64, error), content io.Reader) {
+	code := http.StatusOK
+
+	ctype := mime.TypeByExtension(filepath.Ext(name))
+	if ctype == "" {
+		// read a chunk to decide between utf-8 text and binary
+		var buf [512]byte
+		n, _ := io.ReadFull(content, buf[:])
+		ctype = http.DetectContentType(buf[:n])
+		content = io.MultiReader(bytes.NewReader(buf[:n]), content)
+	}
+	w.Header().Set("Content-Type", ctype)
+
+	size, err := sizeFunc()
+	if err != nil {
+		//Error(w, err.Error(), StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(code)
+
+	if r.Method != "HEAD" {
+		_, _ = io.CopyN(w, content, size)
+	}
 }
