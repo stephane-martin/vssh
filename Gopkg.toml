@@ -83,10 +83,6 @@
   branch = "master"
 
 [[constraint]]
-  name = "github.com/gorilla/handlers"
-  version = "1.4.0"
-
-[[constraint]]
   name = "github.com/cheggaaa/pb"
   version = "1.0.28"
 

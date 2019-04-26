@@ -174,14 +174,6 @@
   version = "v0.3.6"
 
 [[projects]]
-  digest = "1:664d37ea261f0fc73dd17f4a1f5f46d01fbb0b0d75f6375af064824424109b7d"
-  name = "github.com/gorilla/handlers"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "7e0847f9db758cdebd26c149d0ae9d5d0b9c98ce"
-  version = "v1.4.0"
-
-[[projects]]
   digest = "1:0ade334594e69404d80d9d323445d2297ff8161637f9b2d347cc6973d2d6f05b"
   name = "github.com/hashicorp/errwrap"
   packages = ["."]
@@ -618,7 +610,6 @@
     "github.com/gabriel-vasile/mimetype",
     "github.com/gdamore/tcell",
     "github.com/google/gops/agent",
-    "github.com/gorilla/handlers",
     "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
     "github.com/hashicorp/vault/helper/consts",

@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/handlers"
 	"github.com/pkg/sftp"
 )
 
@@ -159,7 +158,7 @@ func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string,
 	fs := &sftpFS{wd: wd, client: client, out: logOut}
 	h := http.FileServer(fs)
 	h = stripModifiedHeader(h)
-	h = handlers.CombinedLoggingHandler(logOut, h)
+	h = LoggingHandler(logOut, h)
 	server := &http.Server{
 		Addr:     addr,
 		Handler:  h,
