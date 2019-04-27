@@ -119,8 +119,12 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"lopen":  s.completeLopen,
 		"rmdir":  s.completeRmdir,
 		"lrmdir": s.completeLrmdir,
+		"lrm":    s.completeLrm,
+		"rm":     s.completeRm,
 		"ledit":  s.completeLedit,
 		"edit":   s.completeEdit,
+		"put":    s.completePut,
+		"get":    s.completeGet,
 	}
 	return s, nil
 }
@@ -241,6 +245,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 		}
 		addr = args[0]
 	}
+	app := tview.NewApplication()
 	tv := tview.NewTextView()
 	tv.SetBorder(true)
 	tv.SetDynamicColors(true)
@@ -248,7 +253,15 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	tv.SetTitle(fmt.Sprintf(title, string(spinner[0])))
 	tv.SetTitleColor(tcell.ColorBlue)
 	tv.SetBorderPadding(1, 1, 1, 1)
-	app := tview.NewApplication().SetRoot(tv, true)
+
+	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape || event.Rune() == 'q' {
+			app.Stop()
+			return nil
+		}
+		return event
+	})
+
 	ctx := context.Background()
 	g, lctx := errgroup.WithContext(ctx)
 
@@ -276,7 +289,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	})
 
 	g.Go(func() error {
-		err := app.Run()
+		err := app.SetRoot(tv, true).Run()
 		if err == nil {
 			return context.Canceled
 		}
@@ -780,6 +793,29 @@ func (s *shellstate) cd(args []string, flags *strset.Set) error {
 	return nil
 }
 
+func nonExistingFiles(args []string, wd string, client *sftp.Client) (*strset.Set, error) {
+	var stat func(string) (os.FileInfo, error)
+	if client == nil {
+		stat = os.Stat
+	} else {
+		stat = client.Stat
+	}
+	s := strset.New()
+	for _, arg := range args {
+		if !lib.HasMeta(arg) {
+			arg = join(wd, arg)
+			_, err := stat(arg)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					return nil, err
+				}
+				s.Add(arg)
+			}
+		}
+	}
+	return s, nil
+}
+
 func findMatches(args []string, wd string, client *sftp.Client, o only) (*strset.Set, error) {
 	allmatches := strset.New()
 	if len(args) == 0 {
@@ -883,9 +919,25 @@ func (s *shellstate) ledit(args []string, flags *strset.Set) error {
 		if err != nil {
 			return err
 		}
+		nonExisting, err := nonExistingFiles(args, s.LocalWD, nil)
+		if err != nil {
+			return err
+		}
+		var created []string
+		for _, fname := range nonExisting.List() {
+			f, err := os.Create(fname)
+			if err != nil {
+				for _, fname2 := range created {
+					_ = os.Remove(fname2)
+				}
+				return err
+			}
+			_ = f.Close()
+			created = append(created, fname)
+		}
+		allmatches.Merge(nonExisting)
 	}
 	if allmatches.Size() == 0 {
-		// TODO: create new file
 		return nil
 	}
 	cmd := exec.Command(editorExe, allmatches.List()...)
@@ -933,10 +985,26 @@ func (s *shellstate) edit(args []string, flags *strset.Set) error {
 		if err != nil {
 			return err
 		}
+		nonExisting, err := nonExistingFiles(args, s.RemoteWD, s.client)
+		if err != nil {
+			return err
+		}
+		var created []string
+		for _, fname := range nonExisting.List() {
+			f, err := s.client.Create(fname)
+			if err != nil {
+				for _, fname2 := range created {
+					_ = s.client.Remove(fname2)
+				}
+				return err
+			}
+			_ = f.Close()
+			created = append(created, fname)
+		}
+		allmatches.Merge(nonExisting)
 	}
 	if allmatches.Size() == 0 {
-		// TODO: create new file
-		return errors.New("no match")
+		return nil
 	}
 
 	// remote file to edit => local filename
@@ -1328,6 +1396,22 @@ func (s *shellstate) completeLedit(args []string, lastSpace bool) []string {
 }
 
 func (s *shellstate) completeEdit(args []string, lastSpace bool) []string {
+	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
+}
+
+func (s *shellstate) completeLrm(args []string, lastSpace bool) []string {
+	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
+}
+
+func (s *shellstate) completeRm(args []string, lastSpace bool) []string {
+	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
+}
+
+func (s *shellstate) completePut(args []string, lastSpace bool) []string {
+	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
+}
+
+func (s *shellstate) completeGet(args []string, lastSpace bool) []string {
 	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
 }
 
