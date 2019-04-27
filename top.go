@@ -130,6 +130,13 @@ func topAction(clictx *cli.Context) (e error) {
 	v.SetDirection(tview.FlexRow)
 	v.SetBorder(true)
 	v.SetTitleColor(tcell.ColorCadetBlue)
+	v.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape || event.Rune() == 'q' {
+			app.Stop()
+			return nil
+		}
+		return event
+	})
 
 	h1 := tview.NewFlex()
 	h1.SetBorderPadding(1, 0, 0, 0)
