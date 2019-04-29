@@ -149,7 +149,7 @@ func topAction(clictx *cli.Context) (e error) {
 	filesystems := textView()
 	filesystems.SetBorder(true)
 	filesystems.SetBorderPadding(1, 1, 1, 1)
-	filesystems.SetTitle(" Filesystems ")
+	filesystems.SetTitle(" Filesystems (unit: MB)")
 	filesystems.SetTitleColor(tcell.ColorLightCoral)
 	h4.AddItem(filesystems, 0, 1, false)
 
@@ -224,21 +224,40 @@ func topAction(clictx *cli.Context) (e error) {
 					)
 					header.SetText(buf.String())
 					var mpLen int
+					var maxUsed uint64
+					var maxTotal uint64
 					for _, fs := range s.FS {
 						if len(fs.MountPoint) > mpLen {
 							mpLen = len(fs.MountPoint)
 						}
+						if fs.Used > maxUsed {
+							maxUsed = fs.Used
+						}
+						if fs.Total() > maxTotal {
+							maxTotal = fs.Total()
+						}
 					}
+					usedLen := len(fmt.Sprintf("%d", maxUsed/(1024*1024)))
+					totalLen := len(fmt.Sprintf("%d", maxTotal/(1024*1024)))
+					usedFmt := fmt.Sprintf("%%-%dd", usedLen)
+					totalFmt := fmt.Sprintf("%%-%dd", totalLen)
 					mpFmt := fmt.Sprintf("%%-%ds", mpLen)
 					buf.Reset()
 					for _, fs := range s.FS {
+						percent := 100 * float64(fs.Used) / float64(fs.Total())
+						percentStr := fmt.Sprintf("%.1f%%", percent)
+						if percent >= 90 {
+							percentStr = fmt.Sprintf("[orange]%.1f%%[-]", percent)
+						} else if percent >= 95 {
+							percentStr = fmt.Sprintf("[red]%.1f%%[-]", percent)
+						}
 						buf.WriteString(
 							fmt.Sprintf(
-								"[blue]"+mpFmt+"[-] [orange]%d[-] MB / [navajowhite]%d[-] MB (%d%%)\n",
+								"[blue]"+mpFmt+"[-] [orange]"+usedFmt+"[-] / [navajowhite]"+totalFmt+"[-] (%s)\n",
 								fs.MountPoint,
 								fs.Used/(1024*1024),
 								fs.Total()/(1024*1024),
-								100*fs.Used/fs.Total(),
+								percentStr,
 							),
 						)
 					}
