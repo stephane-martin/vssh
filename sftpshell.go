@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -57,6 +58,7 @@ type shellstate struct {
 	info          func(string, ...interface{})
 	err           func(string, ...interface{})
 	out           io.Writer
+	environ       map[string]string
 }
 
 func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoFunc func(string, ...interface{}), errFunc func(string, ...interface{})) (*shellstate, error) {
@@ -78,6 +80,7 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		info:          infoFunc,
 		err:           errFunc,
 		out:           out,
+		environ:       make(map[string]string),
 	}
 	s.methods = map[string]command{
 		"less":      s.less,
@@ -112,7 +115,12 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"lrmdir":    s.lrmdir,
 		"lmv":       s.lmv,
 		"mv":        s.mv,
+		"lcp":       s.lcp,
+		"cp":        s.cp,
 		"browse":    s.browse,
+		"env":       s.env,
+		"set":       s.set,
+		"unset":     s.unset,
 	}
 	s.completes = map[string]cmpl{
 		"cd":     s.completeCd,
@@ -130,7 +138,23 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"put":    s.completePut,
 		"get":    s.completeGet,
 	}
+	for _, e := range os.Environ() {
+		spl := strings.SplitN(e, "=", 2)
+		if spl[0] == "" {
+			continue
+		}
+		if len(spl) == 1 {
+			s.environ[spl[0]] = ""
+		}
+		if len(spl) == 2 {
+			s.environ[spl[0]] = spl[1]
+		}
+	}
 	return s, nil
+}
+
+func (s *shellstate) Getenv(k string) string {
+	return s.environ[k]
 }
 
 func (s *shellstate) Close() error {
@@ -173,6 +197,7 @@ func (s *shellstate) Dispatch(line string) error {
 
 	p := shellwords.NewParser()
 	p.ParseEnv = true
+	p.Getenv = s.Getenv
 	args, err := p.Parse(line)
 	if err != nil {
 		return err
@@ -259,12 +284,66 @@ func (s *shellstate) external(cmd string, args []string) error {
 	if err != nil {
 		return err
 	}
+	e := make([]string, 0, len(s.environ))
+	for k, v := range s.environ {
+		e = append(e, fmt.Sprintf("%s=%s", k, v))
+	}
 	c := exec.Command(ex, args...)
+	c.Env = e
 	c.Dir = s.LocalWD
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c.Run()
+}
+
+func (s *shellstate) env(args []string, flags *strset.Set) error {
+	if len(args) == 0 {
+		for k, v := range s.environ {
+			if v == "" {
+				fmt.Fprintf(s.out, "%s=\n", k)
+			} else {
+				v = strconv.Quote(v)
+				fmt.Fprintf(s.out, "%s=%s\n", k, v[1:len(v)-1])
+			}
+		}
+		return nil
+	}
+	if len(args) == 1 {
+		if v, ok := s.environ[args[0]]; ok {
+			if v == "" {
+				fmt.Fprintf(s.out, "%s=\n", args[0])
+			} else {
+				v = strconv.Quote(v)
+				fmt.Fprintf(s.out, "%s=%s\n", args[0], v[1:len(v)-1])
+			}
+			return nil
+		}
+		return fmt.Errorf("no such environment variable: %s", args[0])
+	}
+	return errors.New("env takes zero or one argument")
+}
+
+func (s *shellstate) set(args []string, flags *strset.Set) error {
+	if len(args) != 2 {
+		return errors.New("set takes exactly 2 arguments")
+	}
+	if strings.Contains(args[0], "=") {
+		return errors.New("environment variable key can not contain '='")
+	}
+	s.environ[args[0]] = args[1]
+	return nil
+}
+
+func (s *shellstate) unset(args []string, flags *strset.Set) error {
+	if len(args) != 1 {
+		return errors.New("unset takes exactly one argument")
+	}
+	if _, ok := s.environ[args[0]]; !ok {
+		return fmt.Errorf("no such environment variable: %s", args[0])
+	}
+	delete(s.environ, args[0])
+	return nil
 }
 
 func (s *shellstate) browse(args []string, flags *strset.Set) error {
@@ -460,7 +539,37 @@ func (s *shellstate) copyDirRemote(from, to string) (e error) {
 	return nil
 }
 
-func (s *shellstate) lmvdir(from, to string, flags *strset.Set) error {
+func (s *shellstate) lcpdir(from, to string) error {
+	_, err := os.Stat(to)
+	if err == nil {
+		return fmt.Errorf("destination %s already exists", to)
+	}
+	if !os.IsNotExist(err) {
+		return err
+	}
+
+	err = s.copyDirLocal(from, to)
+	if err == nil {
+		// fix permissions
+		_ = filepath.Walk(from, func(path string, info os.FileInfo, e error) error {
+			if e != nil {
+				return nil
+			}
+			path = rel(from, path)
+			uid, gid := lib.UserGroupNum(info)
+			if uid != -1 && gid != -1 {
+				_ = os.Lchown(join(to, path), uid, gid)
+			}
+			if !isLink(info) {
+				_ = os.Chmod(join(to, path), info.Mode().Perm())
+			}
+			return nil
+		})
+	}
+	return err
+}
+
+func (s *shellstate) lmvdir(from, to string) error {
 	err := os.Rename(from, to)
 	if err == nil {
 		return nil
@@ -469,24 +578,8 @@ func (s *shellstate) lmvdir(from, to string, flags *strset.Set) error {
 		if erno, ok := e.Err.(syscall.Errno); ok {
 			if erno == 18 {
 				// cross-device move directory
-				// here we are sure that "to" does not point to an existing directory (Rename would have failed)
-				err := s.copyDirLocal(from, to)
+				err := s.lcpdir(from, to)
 				if err == nil {
-					// fix permissions
-					_ = filepath.Walk(from, func(path string, info os.FileInfo, e error) error {
-						if e != nil {
-							return nil
-						}
-						path = rel(from, path)
-						uid, gid := lib.UserGroupNum(info)
-						if uid != -1 && gid != -1 {
-							_ = os.Lchown(join(to, path), uid, gid)
-						}
-						if !isLink(info) {
-							_ = os.Chmod(join(to, path), info.Mode().Perm())
-						}
-						return nil
-					})
 					return os.RemoveAll(from)
 				}
 				return err
@@ -496,33 +589,31 @@ func (s *shellstate) lmvdir(from, to string, flags *strset.Set) error {
 	return err
 }
 
-func (s *shellstate) mvdir(from, to string, flags *strset.Set) error {
+func (s *shellstate) cpdir(from, to string) error {
 	s.info("copy directory from %s to %s", from, to)
-	err := s.client.Rename(from, to)
-	if err == nil {
-		return nil
-	}
-	_, err = s.client.Stat(to)
+	_, err := s.client.Stat(to)
 	if err == nil {
 		return fmt.Errorf("destination %s already exists", to)
 	}
 	if !os.IsNotExist(err) {
 		return fmt.Errorf("stat error for %s: %s", to, err)
 	}
-	// cross-device move directory
 	err = s.copyDirRemote(from, to)
 	if err != nil {
 		return err
 	}
 	// fix permissions
+	s.info("fix permissions on destination %s", from)
 	walker := s.client.Walk(from)
 	for walker.Step() {
 		if walker.Err() != nil {
+			s.err("walker error for %s: %s", walker.Path(), walker.Err())
 			continue
 		}
 		path := walker.Path()
 		info := walker.Stat()
 		path = rel(from, path)
+		s.info("fix permissions on %s", join(to, path))
 		uid, gid := lib.UserGroupNum(info)
 		if !isLink(info) {
 			if uid != -1 && gid != -1 {
@@ -531,10 +622,66 @@ func (s *shellstate) mvdir(from, to string, flags *strset.Set) error {
 			_ = s.client.Chmod(join(to, path), info.Mode().Perm())
 		}
 	}
+	return nil
+}
+
+func (s *shellstate) mvdir(from, to string) error {
+	err := s.client.Rename(from, to)
+	if err == nil {
+		s.info("renamed %s to %s", from, to)
+		return nil
+	}
+	err = s.cpdir(from, to)
+	if err != nil {
+		return err
+	}
 	err = _rmdir(s.client, from)
 	if err != nil {
-		return fmt.Errorf("remove failed for %s: %s", from, err)
+		return fmt.Errorf("remove original directory %s failed: %s", from, err)
 	}
+	return nil
+}
+
+func (s *shellstate) cp(args []string, flags *strset.Set) error {
+	// TODO: multiple sources
+	if len(args) != 2 {
+		return errors.New("cp takes two arguments")
+	}
+	from := join(s.RemoteWD, args[0])
+	to := join(s.RemoteWD, args[1])
+	statsF, err := s.client.Stat(from)
+	if err != nil {
+		return fmt.Errorf("stat failed for %s: %s", from, err)
+	}
+	statsT, err := s.client.Stat(to)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat failed for %s: %s", to, err)
+	}
+	if err == nil && statsT.IsDir() {
+		to = join(to, filepath.Base(from))
+	}
+	if statsF.IsDir() {
+		return s.cpdir(from, to)
+	}
+	info, err := s.client.Stat(to)
+	if err == nil && info.IsDir() {
+		return fmt.Errorf("destination exists and is a directory: %s", to)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("stat failed for %s: %s", to, err)
+	}
+	err = copyFileRemote(from, to, s.client)
+	if err != nil {
+		return fmt.Errorf("file copy from %s to %s failed: %s", from, to, err)
+	}
+	uid, gid := lib.UserGroupNum(statsF)
+	if !isLink(statsF) {
+		if uid != -1 && gid != -1 {
+			_ = s.client.Chown(to, uid, gid)
+		}
+		_ = s.client.Chmod(to, statsF.Mode().Perm())
+	}
+	//_ = os.Chtimes()
 	return nil
 }
 
@@ -556,7 +703,7 @@ func (s *shellstate) mv(args []string, flags *strset.Set) error {
 		to = join(to, filepath.Base(from))
 	}
 	if statsF.IsDir() {
-		return s.mvdir(from, to, flags)
+		return s.mvdir(from, to)
 	}
 	err = s.client.Rename(from, to)
 	if err == nil {
@@ -589,6 +736,40 @@ func (s *shellstate) mv(args []string, flags *strset.Set) error {
 	return nil
 }
 
+func (s *shellstate) lcp(args []string, flags *strset.Set) error {
+	if len(args) != 2 {
+		return errors.New("lcp takes two arguments")
+	}
+	from := join(s.LocalWD, args[0])
+	to := join(s.LocalWD, args[1])
+	statsF, err := os.Stat(from)
+	if err != nil {
+		return err
+	}
+	statsT, err := os.Stat(to)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && statsT.IsDir() {
+		to = join(to, filepath.Base(from))
+	}
+	if statsF.IsDir() {
+		return s.lcpdir(from, to)
+	}
+	err = copyFileLocal(from, to)
+	if err != nil {
+		return err
+	}
+	uid, gid := lib.UserGroupNum(statsF)
+	if uid != -1 && gid != -1 {
+		_ = os.Lchown(to, uid, gid)
+	}
+	if !isLink(statsF) {
+		_ = os.Chmod(to, statsF.Mode().Perm())
+	}
+	return nil
+}
+
 func (s *shellstate) lmv(args []string, flags *strset.Set) error {
 	if len(args) != 2 {
 		return errors.New("lmv takes two arguments")
@@ -607,7 +788,7 @@ func (s *shellstate) lmv(args []string, flags *strset.Set) error {
 		to = join(to, filepath.Base(from))
 	}
 	if statsF.IsDir() {
-		return s.lmvdir(from, to, flags)
+		return s.lmvdir(from, to)
 	}
 	err = os.Rename(from, to)
 	if err == nil {
@@ -1825,7 +2006,6 @@ func (s *shellstate) completeRmdir(args []string, lastSpace bool) []string {
 	//return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
 }
 
-// TODO: check that the link forwards to a regular file
 func isRegularOrLink(info os.FileInfo) bool {
 	return info.Mode().IsRegular() || isLink(info)
 }
