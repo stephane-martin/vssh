@@ -9,15 +9,19 @@ import (
 	"github.com/pkg/sftp"
 )
 
-func UserGroup(info os.FileInfo, remote bool) (string, string) {
-	var uid, gid uint32
+func UserGroupNum(info os.FileInfo) (int, int) {
 	if i, ok := info.Sys().(*sftp.FileStat); ok {
-		uid = i.UID
-		gid = i.GID
-	} else if i, ok := info.Sys().(*syscall.Stat_t); ok {
-		uid = i.Uid
-		gid = i.Gid
-	} else {
+		return int(i.UID), int(i.GID)
+	}
+	if i, ok := info.Sys().(*syscall.Stat_t); ok {
+		return int(i.Uid), int(i.Gid)
+	}
+	return -1, -1
+}
+
+func UserGroup(info os.FileInfo, remote bool) (string, string) {
+	uid, gid := UserGroupNum(info)
+	if uid == -1 && gid == -1 {
 		return "", ""
 	}
 	if remote {

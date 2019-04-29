@@ -123,7 +123,7 @@ func sftpCommand() cli.Command {
 			}
 
 			commands := []string{
-				"ls", "lls", "ll", "lll",
+				"ls", "lls", "ll", "lll", "list", "llist",
 				"get", "put",
 				"cd", "lcd",
 				"edit", "ledit",
@@ -131,8 +131,8 @@ func sftpCommand() cli.Command {
 				"open", "lopen",
 				"mkdir", "lmkdir", "mkdirall", "lmkdirall",
 				"pwd", "lpwd",
-				"rename",
 				"rm", "lrm", "rmdir", "lrmdir",
+				"cp", "lcp", "mv", "lmv",
 				"browse",
 				"exit", "logout",
 				"help",

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cheggaaa/pb"
@@ -29,6 +30,8 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 	"golang.org/x/sync/errgroup"
 )
+
+// TODO: deal with symlinks correctly
 
 type only int
 
@@ -107,7 +110,8 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"lrm":       s.lrm,
 		"rmdir":     s.rmdir,
 		"lrmdir":    s.lrmdir,
-		"rename":    s.rename,
+		"lmv":       s.lmv,
+		"mv":        s.mv,
 		"browse":    s.browse,
 	}
 	s.completes = map[string]cmpl{
@@ -168,6 +172,7 @@ func (s *shellstate) Dispatch(line string) error {
 	}
 
 	p := shellwords.NewParser()
+	p.ParseEnv = true
 	args, err := p.Parse(line)
 	if err != nil {
 		return err
@@ -175,7 +180,20 @@ func (s *shellstate) Dispatch(line string) error {
 	if p.Position != -1 {
 		return errors.New("incomplete parsing error")
 	}
-	cmd := strings.ToLower(args[0])
+	if len(args) == 0 {
+		return nil
+	}
+	cmd := args[0]
+
+	if strings.HasPrefix(cmd, "!") {
+		cmd = strings.Trim(cmd, "!")
+		if cmd == "" {
+			return nil
+		}
+		return s.external(cmd, args[1:])
+	}
+
+	cmd = strings.ToLower(cmd)
 	var posargs []string
 	sflags := strset.New()
 	for _, s := range args[1:] {
@@ -236,6 +254,19 @@ func (s *shellstate) llist(args []string, flags *strset.Set) error {
 
 var spinner = []rune("◐◓◑◒")
 
+func (s *shellstate) external(cmd string, args []string) error {
+	ex, err := exec.LookPath(cmd)
+	if err != nil {
+		return err
+	}
+	c := exec.Command(ex, args...)
+	c.Dir = s.LocalWD
+	c.Stdin = os.Stdin
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	return c.Run()
+}
+
 func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	addr := "127.0.0.1:8080"
 	if len(args) > 0 {
@@ -269,7 +300,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	r := bufio.NewReader(pr)
 
 	g.Go(func() error {
-		io.WriteString(tv, fmt.Sprintf("Serve SFTP files from [blue]%s[-] on [blue]%s[-]", s.RemoteWD, addr))
+		_, _ = io.WriteString(tv, fmt.Sprintf("Serve SFTP files from [blue]%s[-] on [blue]%s[-]", s.RemoteWD, addr))
 		for {
 			line, err := r.ReadBytes('\n')
 			if len(line) > 0 {
@@ -325,13 +356,284 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	return err
 }
 
-func (s *shellstate) rename(args []string, flags *strset.Set) error {
+func copyFileRemote(from, to string, client *sftp.Client) error {
+	fromFile, err := client.Open(from)
+	if err != nil {
+		return fmt.Errorf("open failed for %s: %s", from, err)
+	}
+	defer func() { _ = fromFile.Close() }()
+	toFile, err := client.Create(to)
+	if err != nil {
+		return fmt.Errorf("create failed for %s: %s", to, err)
+	}
+	_, err = io.Copy(toFile, fromFile)
+	_ = toFile.Close()
+	if err != nil {
+		_ = client.Remove(to)
+		return fmt.Errorf("copy from %s to %s failed: %s", from, to, err)
+	}
+	return nil
+}
+
+func copyFileLocal(from, to string) error {
+	fromFile, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fromFile.Close() }()
+	toFile, err := os.Create(to)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(toFile, fromFile)
+	_ = toFile.Close()
+	if err != nil {
+		_ = os.Remove(to)
+		return err
+	}
+	return nil
+}
+
+func (s *shellstate) copyDirLocal(from, to string) error {
+	err := filepath.Walk(from, func(path string, info os.FileInfo, e error) error {
+		if e != nil {
+			return e
+		}
+		path = rel(from, path)
+		if info.IsDir() {
+			return os.Mkdir(join(to, path), 0700)
+		} else if info.Mode().IsRegular() {
+			return copyFileLocal(join(from, path), join(to, path))
+		} else if isLink(info) {
+			linkDest, err := os.Readlink(join(from, path))
+			if err != nil {
+				return err
+			}
+			return os.Symlink(linkDest, join(to, path))
+		}
+		return nil
+	})
+	if err != nil {
+		_ = os.RemoveAll(to)
+	}
+	return err
+}
+
+func (s *shellstate) copyDirRemote(from, to string) (e error) {
+	defer func() {
+		if e != nil {
+			_ = _rmdir(s.client, to)
+		}
+	}()
+	walker := s.client.Walk(from)
+	for walker.Step() {
+		if walker.Err() != nil {
+			return fmt.Errorf("walker error for %s: %s", walker.Path(), walker.Err())
+		}
+		path := walker.Path()
+		info := walker.Stat()
+		path = rel(from, path)
+		if info.IsDir() {
+			s.info("mkdir %s", join(to, path))
+			err := s.client.Mkdir(join(to, path))
+			if err != nil {
+				return fmt.Errorf("mkdir failed for %s: %s", join(to, path), err)
+			}
+		} else if info.Mode().IsRegular() {
+			s.info("copy file from %s to %s", join(from, path), join(to, path))
+			err := copyFileRemote(join(from, path), join(to, path), s.client)
+			if err != nil {
+				return err
+			}
+		} else if isLink(info) {
+			linkDest, err := s.client.ReadLink(join(from, path))
+			if err != nil {
+				return fmt.Errorf("readlink failed for %s: %s", join(from, path), err)
+			}
+			s.info("symlink from %s to %s", join(to, path), linkDest)
+			err = s.client.Symlink(linkDest, join(to, path))
+			if err != nil {
+				return fmt.Errorf("syslink failed for %s: %s", linkDest, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *shellstate) lmvdir(from, to string, flags *strset.Set) error {
+	err := os.Rename(from, to)
+	if err == nil {
+		return nil
+	}
+	if e, ok := err.(*os.LinkError); ok {
+		if erno, ok := e.Err.(syscall.Errno); ok {
+			if erno == 18 {
+				// cross-device move directory
+				// here we are sure that "to" does not point to an existing directory (Rename would have failed)
+				err := s.copyDirLocal(from, to)
+				if err == nil {
+					// fix permissions
+					_ = filepath.Walk(from, func(path string, info os.FileInfo, e error) error {
+						if e != nil {
+							return nil
+						}
+						path = rel(from, path)
+						uid, gid := lib.UserGroupNum(info)
+						if uid != -1 && gid != -1 {
+							_ = os.Lchown(join(to, path), uid, gid)
+						}
+						if !isLink(info) {
+							_ = os.Chmod(join(to, path), info.Mode().Perm())
+						}
+						return nil
+					})
+					return os.RemoveAll(from)
+				}
+				return err
+			}
+		}
+	}
+	return err
+}
+
+func (s *shellstate) mvdir(from, to string, flags *strset.Set) error {
+	s.info("copy directory from %s to %s", from, to)
+	err := s.client.Rename(from, to)
+	if err == nil {
+		return nil
+	}
+	_, err = s.client.Stat(to)
+	if err == nil {
+		return fmt.Errorf("destination %s already exists", to)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("stat error for %s: %s", to, err)
+	}
+	// cross-device move directory
+	err = s.copyDirRemote(from, to)
+	if err != nil {
+		return err
+	}
+	// fix permissions
+	walker := s.client.Walk(from)
+	for walker.Step() {
+		if walker.Err() != nil {
+			continue
+		}
+		path := walker.Path()
+		info := walker.Stat()
+		path = rel(from, path)
+		uid, gid := lib.UserGroupNum(info)
+		if !isLink(info) {
+			if uid != -1 && gid != -1 {
+				_ = s.client.Chown(join(to, path), uid, gid)
+			}
+			_ = s.client.Chmod(join(to, path), info.Mode().Perm())
+		}
+	}
+	err = _rmdir(s.client, from)
+	if err != nil {
+		return fmt.Errorf("remove failed for %s: %s", from, err)
+	}
+	return nil
+}
+
+func (s *shellstate) mv(args []string, flags *strset.Set) error {
 	if len(args) != 2 {
-		return errors.New("rename takes two arguments")
+		return errors.New("mv takes two arguments")
 	}
 	from := join(s.RemoteWD, args[0])
 	to := join(s.RemoteWD, args[1])
-	return s.client.Rename(from, to)
+	statsF, err := s.client.Stat(from)
+	if err != nil {
+		return err
+	}
+	statsT, err := s.client.Stat(to)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && statsT.IsDir() {
+		to = join(to, filepath.Base(from))
+	}
+	if statsF.IsDir() {
+		return s.mvdir(from, to, flags)
+	}
+	err = s.client.Rename(from, to)
+	if err == nil {
+		return nil
+	}
+	info, err := s.client.Stat(to)
+	if err == nil && info.IsDir() {
+		return fmt.Errorf("destination exists and is a directory: %s", to)
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("stat failed for %s: %s", to, err)
+	}
+	// cross-device move file
+	err = copyFileRemote(from, to, s.client)
+	if err != nil {
+		return fmt.Errorf("file copy from %s to %s failed: %s", from, to, err)
+	}
+	uid, gid := lib.UserGroupNum(statsF)
+	if !isLink(statsF) {
+		if uid != -1 && gid != -1 {
+			_ = s.client.Chown(to, uid, gid)
+		}
+		_ = s.client.Chmod(to, statsF.Mode().Perm())
+	}
+	//_ = os.Chtimes()
+	err = s.client.Remove(from)
+	if err != nil {
+		return fmt.Errorf("remove original file %s failed: %s", from, err)
+	}
+	return nil
+}
+
+func (s *shellstate) lmv(args []string, flags *strset.Set) error {
+	if len(args) != 2 {
+		return errors.New("lmv takes two arguments")
+	}
+	from := join(s.LocalWD, args[0])
+	to := join(s.LocalWD, args[1])
+	statsF, err := os.Stat(from)
+	if err != nil {
+		return err
+	}
+	statsT, err := os.Stat(to)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil && statsT.IsDir() {
+		to = join(to, filepath.Base(from))
+	}
+	if statsF.IsDir() {
+		return s.lmvdir(from, to, flags)
+	}
+	err = os.Rename(from, to)
+	if err == nil {
+		return nil
+	}
+	if e, ok := err.(*os.LinkError); ok {
+		if erno, ok := e.Err.(syscall.Errno); ok {
+			if erno == 18 {
+				// cross-device move file
+				err := copyFileLocal(from, to)
+				if err != nil {
+					return err
+				}
+				uid, gid := lib.UserGroupNum(statsF)
+				if uid != -1 && gid != -1 {
+					_ = os.Lchown(to, uid, gid)
+				}
+				if !isLink(statsF) {
+					_ = os.Chmod(to, statsF.Mode().Perm())
+				}
+				//_ = os.Chtimes()
+				return os.Remove(from)
+			}
+		}
+	}
+	return err
 }
 
 func (s *shellstate) mkdir(args []string, flags *strset.Set) error {
@@ -362,51 +664,50 @@ func (s *shellstate) rm(args []string, flags *strset.Set) error {
 	return nil
 }
 
+func _rmdir(client *sftp.Client, dirname string) (e error) {
+	stats, err := client.Stat(dirname)
+	if err != nil {
+		return err
+	}
+	if !stats.IsDir() {
+		return client.Remove(dirname)
+	}
+	files, err := client.ReadDir(dirname)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		path := join(dirname, file.Name())
+		if file.IsDir() {
+			err := _rmdir(client, path)
+			if err != nil {
+				if e == nil {
+					e = err
+				}
+			}
+		} else {
+			err := client.Remove(path)
+			if err != nil {
+				if e == nil {
+					e = err
+				}
+			}
+		}
+	}
+	if e != nil {
+		return e
+	}
+	return client.Remove(dirname)
+
+}
+
 func (s *shellstate) rmdir(args []string, flags *strset.Set) error {
 	if len(args) == 0 {
 		return errors.New("rmdir needs at least one argument")
 	}
-	var _rmdir func(string) error
-	_rmdir = func(dirname string) (e error) {
-		stats, err := s.client.Stat(dirname)
-		if err != nil {
-			return err
-		}
-		if !stats.IsDir() {
-			return s.client.Remove(dirname)
-		}
-		files, err := s.client.ReadDir(dirname)
-		if err != nil {
-			return err
-		}
-		for _, file := range files {
-			path := join(dirname, file.Name())
-			if file.IsDir() {
-				err := _rmdir(path)
-				if err != nil {
-					s.err("rmdir on %s: %s", path, err)
-					if e == nil {
-						e = err
-					}
-				}
-			} else {
-				err := s.client.Remove(path)
-				if err != nil {
-					s.err("rm on %s: %s", path, err)
-					if e == nil {
-						e = err
-					}
-				}
-			}
-		}
-		if e != nil {
-			return e
-		}
-		return s.client.Remove(dirname)
-	}
 	for _, name := range args {
 		path := join(s.RemoteWD, name)
-		err := _rmdir(path)
+		err := _rmdir(s.client, path)
 		if err != nil {
 			s.err("%s: %s", name, err)
 		}
@@ -742,6 +1043,7 @@ func (s *shellstate) lpwd(args []string, flags *strset.Set) error {
 }
 
 func (s *shellstate) lcd(args []string, flags *strset.Set) error {
+	var err error
 	if len(args) > 1 {
 		return errors.New("lcd takes only one argument")
 	}
@@ -753,6 +1055,10 @@ func (s *shellstate) lcd(args []string, flags *strset.Set) error {
 		args = append(args, name)
 	}
 	dirname := join(s.LocalWD, strings.TrimRight(args[0], "/"))
+	dirname, err = filepath.EvalSymlinks(dirname)
+	if err != nil {
+		return err
+	}
 	stats, err := os.Stat(dirname)
 	if err != nil {
 		return err
@@ -1314,9 +1620,59 @@ func candidate(wd, input string) (cand, dirname, relDirname string) {
 	return cand, dirname, rel(wd, dirname)
 }
 
-func _completeArgManyFile(wd string, client *sftp.Client, readDir func(string) ([]os.FileInfo, error), args []string, lastSpace bool) []string {
+func _completeArgManyDirs(wd string, client *sftp.Client, args []string, lastSpace bool) []string {
 	if len(args) == 0 {
-		return _completeArgOne(wd, readDir, nil, false, filesAndDirs)
+		return _completeArgOne(wd, client, nil, false, onlyDirs)
+	}
+	var arg, firstArgs []string
+	if lastSpace {
+		firstArgs = args
+	} else {
+		arg = args[len(args)-1:]
+		firstArgs = args[0 : len(args)-1]
+	}
+	quoteSlice(firstArgs)
+	if !lastSpace && lib.HasMeta(arg[0]) {
+		// expand the glob pattern
+		matches, err := findMatches(arg, wd, client, onlyDirs)
+		if err != nil {
+			return nil
+		}
+		if matches.Size() == 0 {
+			return []string{joinSlices(firstArgs)}
+		}
+		list := make([]string, 0, matches.Size())
+		matches.Each(func(m string) bool {
+			list = append(list, quoteString(rel(wd, m)))
+			return true
+		})
+		sort.Strings(list)
+		return []string{joinSlices(firstArgs, list) + " "}
+	}
+	var props []string
+	if lastSpace {
+		// new last empty argument
+		props = _completeArgOne(wd, client, nil, false, onlyDirs)
+	} else {
+		// there is no glob pattern: try to complete the last argument
+		props = _completeArgOne(wd, client, arg, false, onlyDirs)
+	}
+	if len(props) == 0 {
+		return nil
+	}
+	if len(firstArgs) == 0 {
+		return props
+	}
+	mapSlice(props, func(s string) string {
+		return strings.Join(firstArgs, " ") + " " + s
+	})
+	return props
+
+}
+
+func _completeArgManyFile(wd string, client *sftp.Client, args []string, lastSpace bool) []string {
+	if len(args) == 0 {
+		return _completeArgOne(wd, client, nil, false, filesAndDirs)
 	}
 	var arg, firstArgs []string
 	if lastSpace {
@@ -1346,10 +1702,10 @@ func _completeArgManyFile(wd string, client *sftp.Client, readDir func(string) (
 	var props []string
 	if lastSpace {
 		// new last empty argument
-		props = _completeArgOne(wd, readDir, nil, false, filesAndDirs)
+		props = _completeArgOne(wd, client, nil, false, filesAndDirs)
 	} else {
 		// there is no glob pattern: try to complete the last argument
-		props = _completeArgOne(wd, readDir, arg, false, filesAndDirs)
+		props = _completeArgOne(wd, client, arg, false, filesAndDirs)
 	}
 	if len(props) == 0 {
 		return nil
@@ -1363,9 +1719,15 @@ func _completeArgManyFile(wd string, client *sftp.Client, readDir func(string) (
 	return props
 }
 
-func _completeArgOne(wd string, readDir func(string) ([]os.FileInfo, error), args []string, lastSpace bool, o only) []string {
+func _completeArgOne(wd string, client *sftp.Client, args []string, lastSpace bool, o only) []string {
 	if lastSpace || len(args) > 1 {
 		return nil
+	}
+	readDir := ioutil.ReadDir
+	stat := os.Stat
+	if client != nil {
+		readDir = client.ReadDir
+		stat = client.Stat
 	}
 	var input string
 	if len(args) == 1 {
@@ -1376,6 +1738,20 @@ func _completeArgOne(wd string, readDir func(string) ([]os.FileInfo, error), arg
 	if err != nil {
 		return nil
 	}
+	// replace symbolic links entries returned by readDir
+	filtered := files[0:0]
+	for i := range files {
+		if !isLink(files[i]) {
+			filtered = append(filtered, files[i])
+			continue
+		}
+		stats, err := stat(join(dirname, files[i].Name()))
+		if err != nil {
+			continue
+		}
+		filtered = append(filtered, stats)
+	}
+	files = filtered
 	props := completeFiles(cand, files, o)
 	if len(props) == 0 {
 		return nil
@@ -1392,61 +1768,70 @@ func _completeArgOne(wd string, readDir func(string) ([]os.FileInfo, error), arg
 }
 
 func (s *shellstate) completeLedit(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.LocalWD, nil, args, lastSpace)
 }
 
 func (s *shellstate) completeEdit(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.RemoteWD, s.client, args, lastSpace)
 }
 
 func (s *shellstate) completeLrm(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.LocalWD, nil, args, lastSpace)
 }
 
 func (s *shellstate) completeRm(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.RemoteWD, s.client, args, lastSpace)
 }
 
 func (s *shellstate) completePut(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.LocalWD, nil, ioutil.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.LocalWD, nil, args, lastSpace)
 }
 
 func (s *shellstate) completeGet(args []string, lastSpace bool) []string {
-	return _completeArgManyFile(s.RemoteWD, s.client, s.client.ReadDir, args, lastSpace)
+	return _completeArgManyFile(s.RemoteWD, s.client, args, lastSpace)
 }
 
 func (s *shellstate) completeLopen(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, filesAndDirs)
+	return _completeArgOne(s.LocalWD, nil, args, lastSpace, filesAndDirs)
 }
 
 func (s *shellstate) completeOpen(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, filesAndDirs)
+	return _completeArgOne(s.RemoteWD, s.client, args, lastSpace, filesAndDirs)
 }
 
 func (s *shellstate) completeLless(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, filesAndDirs)
+	return _completeArgOne(s.LocalWD, nil, args, lastSpace, filesAndDirs)
 }
 
 func (s *shellstate) completeLess(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, filesAndDirs)
+	return _completeArgOne(s.RemoteWD, s.client, args, lastSpace, filesAndDirs)
 }
 
 func (s *shellstate) completeLcd(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, onlyDirs)
+	return _completeArgOne(s.LocalWD, nil, args, lastSpace, onlyDirs)
 }
 
 func (s *shellstate) completeCd(args []string, lastSpace bool) []string {
-	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
+	return _completeArgOne(s.RemoteWD, s.client, args, lastSpace, onlyDirs)
 }
 
 func (s *shellstate) completeLrmdir(args []string, lastSpace bool) []string {
-	// FIX (many)
-	return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, onlyDirs)
+	return _completeArgManyDirs(s.LocalWD, nil, args, lastSpace)
+	//return _completeArgOne(s.LocalWD, ioutil.ReadDir, args, lastSpace, onlyDirs)
 }
 
 func (s *shellstate) completeRmdir(args []string, lastSpace bool) []string {
-	// FIX (many)
-	return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
+	return _completeArgManyDirs(s.RemoteWD, s.client, args, lastSpace)
+	//return _completeArgOne(s.RemoteWD, s.client.ReadDir, args, lastSpace, onlyDirs)
+}
+
+// TODO: check that the link forwards to a regular file
+func isRegularOrLink(info os.FileInfo) bool {
+	return info.Mode().IsRegular() || isLink(info)
+}
+
+func isLink(info os.FileInfo) bool {
+	return (info.Mode() & os.ModeSymlink) != 0
 }
 
 func completeFiles(candidate string, files []os.FileInfo, o only) []string {
@@ -1460,7 +1845,7 @@ func completeFiles(candidate string, files []os.FileInfo, o only) []string {
 		}
 	} else if o == onlyFiles {
 		for _, info := range files {
-			if info.Mode().IsRegular() {
+			if isRegularOrLink(info) {
 				props = append(props, info.Name())
 			}
 		}
@@ -1468,7 +1853,7 @@ func completeFiles(candidate string, files []os.FileInfo, o only) []string {
 		for _, info := range files {
 			if info.IsDir() {
 				props = append(props, info.Name()+"/")
-			} else if info.Mode().IsRegular() {
+			} else if isRegularOrLink(info) {
 				props = append(props, info.Name())
 			}
 		}
