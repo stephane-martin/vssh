@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -51,13 +48,7 @@ func topAction(clictx *cli.Context) (e error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sigchan := make(chan os.Signal, 1)
-	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		for range sigchan {
-			cancel()
-		}
-	}()
+	cancelOnSignal(cancel)
 
 	params := lib.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
@@ -71,12 +62,10 @@ func topAction(clictx *cli.Context) (e error) {
 
 	var c CLIContext = cliContext{ctx: clictx}
 	if c.SSHHost() == "" {
-		if c.SSHHost() == "" {
-			var err error
-			c, err = Form(c, true)
-			if err != nil {
-				return err
-			}
+		var err error
+		c, err = Form(c, true)
+		if err != nil {
+			return err
 		}
 	}
 

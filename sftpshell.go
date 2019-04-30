@@ -1714,6 +1714,7 @@ func (s *shellstate) ls(args []string, flags *strset.Set) error {
 }
 
 func (s *shellstate) lll(args []string, flags *strset.Set) error {
+	// TODO: focus on the right line
 	for {
 		files, err := ioutil.ReadDir(s.LocalWD)
 		if err != nil {

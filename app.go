@@ -22,6 +22,7 @@ func App() *cli.App {
 		sftpCommand(),
 		topCommand(),
 		browseCommand(),
+		tunnelCommand(),
 		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",

@@ -82,12 +82,10 @@ func sshAction(clictx *cli.Context) (e error) {
 
 	var c CLIContext = cliContext{ctx: clictx}
 	if c.SSHHost() == "" {
-		if c.SSHHost() == "" {
-			var err error
-			c, err = Form(c, true)
-			if err != nil {
-				return err
-			}
+		var err error
+		c, err = Form(c, true)
+		if err != nil {
+			return err
 		}
 	}
 
