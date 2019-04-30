@@ -20,17 +20,23 @@ import (
 	"github.com/pkg/sftp"
 )
 
-type sftpFS struct {
+type bFS struct {
 	wd     string
 	client *sftp.Client
 	out    *logWriter
+}
+
+type bFile interface {
+	io.Reader
+	io.Closer
+	Stat() (os.FileInfo, error)
+	Readdir(int) ([]os.FileInfo, error)
 }
 
 type sftpFile struct {
 	remotePath string
 	remoteFile *sftp.File
 	client     *sftp.Client
-	out        *logWriter
 }
 
 func (f *sftpFile) Read(p []byte) (n int, err error) {
@@ -41,8 +47,7 @@ func (f *sftpFile) Close() error {
 	return f.remoteFile.Close()
 }
 
-func (f *sftpFile) Readdir() ([]os.FileInfo, error) {
-	f.out.Print("List SFTP directory [blue]%s[-]", f.remotePath)
+func (f *sftpFile) Readdir(_ int) ([]os.FileInfo, error) {
 	return f.client.ReadDir(f.remotePath)
 }
 
@@ -50,18 +55,25 @@ func (f *sftpFile) Stat() (os.FileInfo, error) {
 	return f.remoteFile.Stat()
 }
 
-func (fs *sftpFS) Open(name string) (*sftpFile, error) {
-	remotePath := filepath.Join(fs.wd, path.Clean("/"+name))
-	remoteFile, err := fs.client.Open(remotePath)
+func (fs *bFS) Open(name string) (bFile, error) {
+	p := filepath.Join(fs.wd, path.Clean("/"+name))
+	if fs.client == nil {
+		f, err := os.Open(p)
+		if err != nil {
+			return nil, err
+		}
+		fs.out.Print("Open local file [blue]%s[-]", p)
+		return f, nil
+	}
+	f, err := fs.client.Open(p)
 	if err != nil {
 		return nil, err
 	}
-	fs.out.Print("Open SFTP file [blue]%s[-]", remotePath)
+	fs.out.Print("Open SFTP file [blue]%s[-]", p)
 	return &sftpFile{
-		remotePath: remotePath,
-		remoteFile: remoteFile,
+		remotePath: p,
+		remoteFile: f,
 		client:     fs.client,
-		out:        fs.out,
 	}, nil
 }
 
@@ -89,7 +101,7 @@ func (w *logWriter) Print(s string, args ...interface{}) (int, error) {
 
 func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string, out io.Writer) error {
 	logOut := &logWriter{out: out}
-	fs := &sftpFS{wd: wd, client: client, out: logOut}
+	fs := &bFS{wd: wd, client: client, out: logOut}
 	var h http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upath := r.URL.Path
 		if !strings.HasPrefix(upath, "/") {
@@ -115,10 +127,10 @@ func browseDir(ctx context.Context, client *sftp.Client, addr string, wd string,
 	return err
 }
 
-func dirList(w http.ResponseWriter, r *http.Request, f *sftpFile) {
-	dirs, err := f.Readdir()
+func dirList(w http.ResponseWriter, r *http.Request, fs *bFS, f bFile) {
+	dirs, err := f.Readdir(-1)
 	if err != nil {
-		f.out.Print("[red]http: error reading directory: %v[-]", err)
+		fs.out.Print("[red]http: error reading directory: %v[-]", err)
 		http.Error(w, "Error reading directory", http.StatusInternalServerError)
 		return
 	}
@@ -150,7 +162,7 @@ var htmlReplacer = strings.NewReplacer(
 	"'", "&#39;",
 )
 
-func serveFile(w http.ResponseWriter, r *http.Request, fs *sftpFS, name string, redirect bool) {
+func serveFile(w http.ResponseWriter, r *http.Request, fs *bFS, name string, redirect bool) {
 	const indexPage = "/index.html"
 
 	// redirect .../index.html to .../
@@ -218,7 +230,7 @@ func serveFile(w http.ResponseWriter, r *http.Request, fs *sftpFS, name string, 
 
 	// Still a directory? (we didn't find an index.html file)
 	if d.IsDir() {
-		dirList(w, r, f)
+		dirList(w, r, fs, f)
 		return
 	}
 

@@ -118,6 +118,7 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"lcp":       s.lcp,
 		"cp":        s.cp,
 		"browse":    s.browse,
+		"lbrowse":   s.lbrowse,
 		"env":       s.env,
 		"set":       s.set,
 		"unset":     s.unset,
@@ -346,7 +347,7 @@ func (s *shellstate) unset(args []string, flags *strset.Set) error {
 	return nil
 }
 
-func (s *shellstate) browse(args []string, flags *strset.Set) error {
+func _browse(args []string, wd string, client *sftp.Client) error {
 	addr := "127.0.0.1:8080"
 	if len(args) > 0 {
 		_, _, err := net.SplitHostPort(args[0])
@@ -359,7 +360,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	tv := tview.NewTextView()
 	tv.SetBorder(true)
 	tv.SetDynamicColors(true)
-	title := fmt.Sprintf(" browsing: %s %%s ", s.RemoteWD)
+	title := fmt.Sprintf(" browsing directory: %s %%s ", wd)
 	tv.SetTitle(fmt.Sprintf(title, string(spinner[0])))
 	tv.SetTitleColor(tcell.ColorBlue)
 	tv.SetBorderPadding(1, 1, 1, 1)
@@ -379,7 +380,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	r := bufio.NewReader(pr)
 
 	g.Go(func() error {
-		_, _ = io.WriteString(tv, fmt.Sprintf("Serve SFTP files from [blue]%s[-] on [blue]%s[-]", s.RemoteWD, addr))
+		_, _ = io.WriteString(tv, fmt.Sprintf("Serve files from [blue]%s[-] on [blue]%s[-]", wd, addr))
 		for {
 			line, err := r.ReadBytes('\n')
 			if len(line) > 0 {
@@ -393,7 +394,7 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 	})
 
 	g.Go(func() error {
-		err := browseDir(lctx, s.client, addr, s.RemoteWD, pw)
+		err := browseDir(lctx, client, addr, wd, pw)
 		_ = pw.Close()
 		return err
 	})
@@ -433,6 +434,14 @@ func (s *shellstate) browse(args []string, flags *strset.Set) error {
 		return nil
 	}
 	return err
+}
+
+func (s *shellstate) browse(args []string, flags *strset.Set) error {
+	return _browse(args, s.RemoteWD, s.client)
+}
+
+func (s *shellstate) lbrowse(args []string, flags *strset.Set) error {
+	return _browse(args, s.LocalWD, nil)
 }
 
 func copyFileRemote(from, to string, client *sftp.Client) error {
