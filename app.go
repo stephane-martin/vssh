@@ -21,6 +21,7 @@ func App() *cli.App {
 		scpCommand(),
 		sftpCommand(),
 		topCommand(),
+		browseCommand(),
 		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",

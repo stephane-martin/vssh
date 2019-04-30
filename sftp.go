@@ -18,15 +18,29 @@ import (
 	"github.com/mattn/go-shellwords"
 	"github.com/mitchellh/go-homedir"
 	"github.com/peterh/liner"
+	"github.com/rivo/tview"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
-func sftpCommand() cli.Command {
+func browseCommand() cli.Command {
 	return cli.Command{
-		Name:  "sftp",
-		Usage: "download/upload files with sftp protocol using Vault for authentication",
+		Name:  "browse",
+		Usage: "view a SFTP server through HTTP",
+		Flags: []cli.Flag{
+			cli.StringFlag{
+				Name:  "directory,d",
+				Usage: "remote base directory to browse",
+				Value: "",
+			},
+			cli.StringFlag{
+				Name:  "http-addr",
+				Usage: "HTTP listen address",
+				Value: "127.0.0.1:8080",
+			},
+		},
 		Action: func(clictx *cli.Context) (e error) {
 			defer func() {
 				if e != nil {
@@ -57,8 +71,118 @@ func sftpCommand() cli.Command {
 				return err
 			}
 
-			// TODO: get rid of context.Background
-			_, credentials, err := getCredentials(context.Background(), c, sshParams.LoginName, logger)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cancelOnSignal(cancel)
+
+			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+			if err != nil {
+				return err
+			}
+
+			var methods []ssh.AuthMethod
+			for _, credential := range credentials {
+				m, err := credential.AuthMethod()
+				if err == nil {
+					methods = append(methods, m)
+				} else {
+					logger.Errorw("failed to use credentials", "error", err)
+				}
+			}
+			if len(methods) == 0 {
+				return errors.New("no usable credentials")
+			}
+
+			client, err := lib.SFTPClient(sshParams, methods, logger)
+			if err != nil {
+				return err
+			}
+			defer func() { client.Close() }()
+			directory := clictx.String("directory")
+			if directory == "" {
+				directory, err = client.Getwd()
+				if err != nil {
+					return err
+				}
+			}
+			info, err := client.Stat(directory)
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				return fmt.Errorf("not a directory: %s", directory)
+			}
+			addr := clictx.String("http-addr")
+			if addr == "" {
+				addr = "127.0.0.1:8080"
+			}
+			g, lctx := errgroup.WithContext(ctx)
+			app := tview.NewApplication()
+			tv := textView()
+			tv.SetChangedFunc(func() {
+				app.Draw()
+			})
+
+			g.Go(func() error {
+				return browseDir(lctx, client, addr, directory, tv)
+			})
+
+			g.Go(func() error {
+				err := app.SetRoot(tv, true).Run()
+				if err == nil {
+					return context.Canceled
+				}
+				return err
+			})
+
+			err = g.Wait()
+			if err == context.Canceled {
+				return nil
+			}
+			return err
+		},
+	}
+}
+
+func sftpCommand() cli.Command {
+	return cli.Command{
+		Name:  "sftp",
+		Usage: "download/upload files with sftp protocol using Vault for authentication",
+		Action: func(clictx *cli.Context) (e error) {
+			defer func() {
+				if e != nil {
+					e = cli.NewExitError(e.Error(), 1)
+				}
+			}()
+
+			params := lib.Params{
+				LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
+			}
+
+			logger, err := Logger(params.LogLevel)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = logger.Sync() }()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			cancelOnSignal(cancel)
+
+			var c CLIContext = cliContext{ctx: clictx}
+			if c.SSHHost() == "" {
+				var err error
+				c, err = Form(c, false)
+				if err != nil {
+					return err
+				}
+			}
+			sshParams, err := getSSHParams(c)
+			if err != nil {
+				return err
+			}
+
+			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
 			if err != nil {
 				return err
 			}
@@ -238,13 +362,7 @@ func sftpCommand() cli.Command {
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
-					sigchan := make(chan os.Signal, 1)
-					signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-					go func() {
-						for range sigchan {
-							cancel()
-						}
-					}()
+					cancelOnSignal(cancel)
 
 					params := lib.Params{
 						LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
