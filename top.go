@@ -107,6 +107,7 @@ func topAction(clictx *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	stater, err := NewStater(client)
 	if err != nil {
 		return err

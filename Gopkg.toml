@@ -86,6 +86,14 @@
   name = "github.com/cheggaaa/pb"
   version = "1.0.28"
 
+[[constraint]]
+  name = "github.com/miekg/dns"
+  version = "1.1.9"
+
+[[constraint]]
+  name = "github.com/getlantern/go-socks5"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true

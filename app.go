@@ -23,6 +23,8 @@ func App() *cli.App {
 		topCommand(),
 		browseCommand(),
 		tunnelCommand(),
+		resolveCommand(),
+		socksCommand(),
 		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",
