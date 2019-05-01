@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"io/ioutil"
 	"net"
 	"strings"
 
 	"github.com/getlantern/go-socks5"
+	"github.com/getlantern/golog"
+	"github.com/getlantern/hidden"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
@@ -122,6 +125,15 @@ func socksAction(clictx *cli.Context) (e error) {
 			return client.Dial(network, addr)
 		},
 	}
+	golog.SetOutputs(ioutil.Discard, ioutil.Discard)
+	golog.RegisterReporter(func(err error, linePrefix string, severity golog.Severity, ctx map[string]interface{}) {
+		kv := make([]interface{}, 0, 2*len(ctx)+2)
+		kv = append(kv, "error", hidden.Clean(err.Error()))
+		for k, v := range ctx {
+			kv = append(kv, k, v)
+		}
+		logger.Debugw("socks error", kv...)
+	})
 
 	socksServer, err := socks5.New(&socksConfig)
 	if err != nil {

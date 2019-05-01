@@ -711,6 +711,8 @@
     "github.com/gabriel-vasile/mimetype",
     "github.com/gdamore/tcell",
     "github.com/getlantern/go-socks5",
+    "github.com/getlantern/golog",
+    "github.com/getlantern/hidden",
     "github.com/google/gops/agent",
     "github.com/hashicorp/go-cleanhttp",
     "github.com/hashicorp/vault/api",
