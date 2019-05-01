@@ -498,7 +498,7 @@ func sftpCommand() cli.Command {
 						} else {
 							if strings.HasPrefix(filepath.Base(path), ".") {
 								if hidden {
-									fmt.Println(aur.Gray(relname))
+									fmt.Println(aur.Gray(12, relname))
 								}
 							} else {
 								fmt.Println(relname)

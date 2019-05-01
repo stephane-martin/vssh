@@ -1,10 +1,10 @@
 //
-// Copyright (c) 2016 Konstantin Ivanov <kostyarin.ivanov@gmail.com>.
-// All rights reserved. This program is free software. It comes without
-// any warranty, to the extent permitted by applicable law. You can
-// redistribute it and/or modify it under the terms of the Do What
-// The Fuck You Want To Public License, Version 2, as published by
-// Sam Hocevar. See LICENSE file for more details or see below.
+// Copyright (c) 2016-2019 The Aurora Authors. All rights reserved.
+// This program is free software. It comes without any warranty,
+// to the extent permitted by applicable law. You can redistribute
+// it and/or modify it under the terms of the Do What The Fuck You
+// Want To Public License, Version 2, as published by Sam Hocevar.
+// See LICENSE file for more details or see below.
 //
 
 //
@@ -50,7 +50,6 @@ func Sprintf(format interface{}, args ...interface{}) string {
 				args[i] = val.setTail(ft.Color())
 				continue
 			}
-			args[i] = value{v, 0, ft.Color()}
 		}
 		return fmt.Sprintf(ft.String(), args...)
 	}

@@ -115,7 +115,7 @@
   version = "v1.13.1"
 
 [[projects]]
-  digest = "1:ae83f1cc506f08fb15b70ab890d8b12ce0621ad3cafbef072e4d6151506e1ed8"
+  digest = "1:f84649b065e44256426db07fd03648778f7ab4557eeda09d24e9c47897b485c7"
   name = "github.com/gabriel-vasile/mimetype"
   packages = [
     ".",
@@ -123,8 +123,8 @@
     "internal/matchers",
   ]
   pruneopts = "UT"
-  revision = "db305cf4981bf55d50593934f8da422d6ffdeba9"
-  version = "v0.3.2"
+  revision = "daa3d223482c63fe56c5b544d2266200d38c62d4"
+  version = "v0.3.6"
 
 [[projects]]
   digest = "1:0e16b03c72bd42739ca68d055c10369e60d17838428f512f3b29ae115ba788e0"
@@ -324,8 +324,8 @@
     "helper/strutil",
   ]
   pruneopts = "UT"
-  revision = "a3dcd63451cf6da1d04928b601bbe9748d53842e"
-  version = "v1.1.1"
+  revision = "0082501623c0b704b87b1fbc84c2d725994bac54"
+  version = "v1.1.2"
 
 [[projects]]
   branch = "master"
@@ -336,12 +336,12 @@
   revision = "2bc1f35cddc0cc527b4bc3dce8578fc2a6c11384"
 
 [[projects]]
-  digest = "1:38d2e838817528fd7d1ccdf7fa6700ee0f1727b3c484d13cab54bfbdaab12b0e"
+  digest = "1:4691cbb2f38f734a02226f246dbf081d9b15b249d1d6ef051b40e7e41aaf6ce5"
   name = "github.com/karrick/godirwalk"
   packages = ["."]
   pruneopts = "UT"
-  revision = "6d1c7760ec857d2984abe0a23fa263877f50d3f0"
-  version = "v1.8.0"
+  revision = "d363b358f6c055cf7bb8c6f73c5f892271e850dc"
+  version = "v1.8.2"
 
 [[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
@@ -373,11 +373,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:be40f095cd741773905744f16c1f7a21fd9226ccd0529f019deb7da6d667f71c"
+  digest = "1:46942079ac78aa1636527f40e265e9aff64d85f36bb42b7ca3f31f775831ef53"
   name = "github.com/logrusorgru/aurora"
   packages = ["."]
   pruneopts = "UT"
-  revision = "a7b3b318ed4e1ae5b80602b08627267303c68572"
+  revision = "cea283e61946ad8227cc02a24201407a2c9e5182"
 
 [[projects]]
   digest = "1:39de67207027b7374272d5ec9b1bf85457714150ba1263e8d236316629dad570"
@@ -468,15 +468,15 @@
   revision = "6f820f8f90ce9482ffbd40bb15f9ea9932f4942d"
 
 [[projects]]
-  digest = "1:cf9272ab0a637cb1ffa40e2b6220108d7016a36b3eb357e4b57aacb7a8f725c0"
+  digest = "1:259f9b7645983a7a823318d78aa96dec68af8891f706493ac1ec04d819cb977c"
   name = "github.com/pierrec/lz4"
   packages = [
     ".",
     "internal/xxh32",
   ]
   pruneopts = "UT"
-  revision = "9419d2361c8ae111073ffe3337ecc364fb590921"
-  version = "v2.1.2"
+  revision = "d705d4371bfccdf47f10e45584e896026c83616f"
+  version = "v2.2.3"
 
 [[projects]]
   digest = "1:cf31692c14422fa27c83a05292eb5cbe0fb2775972e8f1f8446a71549bd8980b"
@@ -594,7 +594,7 @@
   version = "v1.1.0"
 
 [[projects]]
-  digest = "1:c52caf7bd44f92e54627a31b85baf06a68333a196b3d8d241480a774733dcf8b"
+  digest = "1:676160e6a4722b08e0e26b11521d575c2cb2b6f0c679e1ee6178c5d8dee51e5e"
   name = "go.uber.org/zap"
   packages = [
     ".",
@@ -605,12 +605,12 @@
     "zapcore",
   ]
   pruneopts = "UT"
-  revision = "ff33455a0e382e8a81d14dd7c922020b6b5e7982"
-  version = "v1.9.1"
+  revision = "27376062155ad36be76b0f12cf1572a221d3a48c"
+  version = "v1.10.0"
 
 [[projects]]
   branch = "master"
-  digest = "1:5696c8f58d08a348d7962e2f8422880eceadfbf29bd26f25799e2aab11d53035"
+  digest = "1:2a8ad2b3ac8cccfef6d42e7331a826a490bcca702f0c6ec29aa219e4d00676ce"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -625,11 +625,11 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "88737f569e3a9c7ab309cdc09a07fe7fc87233c3"
+  revision = "a29dc8fdc73485234dbef99ebedb95d2eced08de"
 
 [[projects]]
   branch = "master"
-  digest = "1:94ecf5b3ff7c757e1d794117bc86f2c8240c55f47e4515f29245f2cef716301c"
+  digest = "1:6cbffc0d92cf6d898cc13a10a062b6c7aab5af50bc62ba5fb10ca38c60215069"
   name = "golang.org/x/net"
   packages = [
     "bpf",
@@ -643,7 +643,7 @@
     "ipv6",
   ]
   pruneopts = "UT"
-  revision = "1da14a5a36f220ea3f03470682b737b1dfd5de22"
+  revision = "9ce7a6920f093fc0b908c4a5f66ae049110f417e"
 
 [[projects]]
   branch = "master"
@@ -651,11 +651,11 @@
   name = "golang.org/x/sync"
   packages = ["errgroup"]
   pruneopts = "UT"
-  revision = "56d357773e8497dfd526f0727e187720d1093757"
+  revision = "112230192c580c3556b8cee6403af37a4fc5f28c"
 
 [[projects]]
   branch = "master"
-  digest = "1:7d66cc475c1a5fdde28caa9d9cd08a0b9baf6c9f5eb49eec6963a77174893c7d"
+  digest = "1:6eb74aa473ae5121e9f3e5d7fc029c42158ee053b3108a7829001f7523488434"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -663,10 +663,10 @@
     "windows",
   ]
   pruneopts = "UT"
-  revision = "12500544f89f9420afe9529ba8940bf72d294972"
+  revision = "d89cdac9e8725f2aefce25fcbfef41134c9ad412"
 
 [[projects]]
-  digest = "1:23c42b366ef158741f7229785fc19761de6372b89ab515cbe43e781056044a4c"
+  digest = "1:79c5cb4177013a706cb70478eedf23df5dc2469170b37e5b49c76cc854521701"
   name = "golang.org/x/text"
   packages = [
     "collate",
@@ -675,6 +675,8 @@
     "encoding/internal/identifier",
     "internal/colltab",
     "internal/gen",
+    "internal/language",
+    "internal/language/compact",
     "internal/tag",
     "internal/triegen",
     "internal/ucd",
@@ -687,8 +689,8 @@
     "unicode/rangetable",
   ]
   pruneopts = "UT"
-  revision = "f21a4dfb5e38f5895301dc265a8def02365cc3d0"
-  version = "v0.3.0"
+  revision = "342b2e1fbaa52c93f31447ad2c6abc048c63e475"
+  version = "v0.3.2"
 
 [[projects]]
   branch = "master"

@@ -58,11 +58,7 @@ func socksAction(clictx *cli.Context) (e error) {
 
 	var c CLIContext = cliContext{ctx: clictx}
 	if c.SSHHost() == "" {
-		var err error
-		c, err = Form(c, true)
-		if err != nil {
-			return err
-		}
+		return errors.New("specify SSH host")
 	}
 
 	sshParams, err := getSSHParams(c)
@@ -148,5 +144,4 @@ func socksAction(clictx *cli.Context) (e error) {
 		_ = listener.Close()
 	}()
 	return socksServer.Serve(listener)
-
 }
