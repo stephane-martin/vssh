@@ -21,7 +21,7 @@ func socksCommand() cli.Command {
 		Flags: []cli.Flag{
 			cli.StringFlag{
 				Name:  "dnsaddr",
-				Usage: "DNS server address on the remote side (optional)",
+				Usage: "DNS server address on the remote side (optional, ex: 127.0.0.1:53)",
 			},
 			cli.StringFlag{
 				Name:  "socksaddr",

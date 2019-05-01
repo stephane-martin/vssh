@@ -445,6 +445,14 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:8368165a1d56fb9c296eb90ed90c51cc0ce563d73c911d3a4c7cb2faa5fc544e"
+  name = "github.com/orcaman/concurrent-map"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "2693aad1ed7517c2bb5b3a42cb8fde88b941d89d"
+
+[[projects]]
+  branch = "master"
   digest = "1:26137fb3f046c54e60a042bb4dffd7841be64ed53cd2f03c6f39042db9ec6f59"
   name = "github.com/oxtoacart/bpool"
   packages = ["."]
@@ -713,6 +721,7 @@
     "github.com/mattn/go-shellwords",
     "github.com/miekg/dns",
     "github.com/mitchellh/go-homedir",
+    "github.com/orcaman/concurrent-map",
     "github.com/peterh/liner",
     "github.com/pkg/sftp",
     "github.com/rivo/tview",
