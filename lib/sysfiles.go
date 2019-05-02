@@ -7,10 +7,25 @@ import (
 	"github.com/ahmetb/go-linq"
 )
 
+type SelectedAction uint8
+
+// TODO: download, upload, delete, edit, help
+
+const (
+	ViewFile SelectedAction = iota
+	OpenDir
+	OpenFile
+	Refresh
+	Stop
+)
+
 type SelectedFile struct {
-	Name string
-	Size int64
-	Mode os.FileMode
+	Name     string
+	Size     int64
+	Mode     os.FileMode
+	Position int
+	Action   SelectedAction
+	IsDir    bool
 }
 
 type Unixfile struct {

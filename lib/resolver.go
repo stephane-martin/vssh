@@ -20,8 +20,6 @@ type Resolver struct {
 	cache      cmap.ConcurrentMap
 }
 
-// TODO: cache results
-
 var pending = "pending"
 
 type ErrResolve struct {

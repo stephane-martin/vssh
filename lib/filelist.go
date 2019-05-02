@@ -17,9 +17,9 @@ import (
 	"github.com/rivo/tview"
 )
 
-func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFile, error) {
+func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool) (*SelectedFile, error) {
+	// TODO: modtime
 	var selected atomic.Value
-	selected.Store(SelectedFile{})
 	var dirs, regulars, irregulars Unixfiles
 	for _, f := range files {
 		u, g := UserGroup(f, remote)
@@ -40,6 +40,20 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 	allfiles = append(allfiles, dirs...)
 	allfiles = append(allfiles, irregulars...)
 	allfiles = append(allfiles, regulars...)
+
+	getFileAtPosition := func(position int) *SelectedFile {
+		if position == 0 || (position >= (len(files) + 2)) {
+			return nil
+		}
+		if position == 1 {
+			return &SelectedFile{Name: "..", Position: position, IsDir: true}
+		}
+		f := allfiles[position-2]
+		if f.IsDir() || f.Mode().IsRegular() {
+			return &SelectedFile{Name: f.Name(), Size: f.Size(), Mode: f.Mode(), Position: position, IsDir: f.IsDir()}
+		}
+		return nil
+	}
 
 	maxNameLength := allfiles.maxNameLength()
 	maxSizeLength := allfiles.maxSizeLength()
@@ -63,7 +77,30 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		key := event.Key()
-		if event.Rune() == 'q' || key == tcell.KeyEscape {
+		r := event.Rune()
+		if r == 'q' || key == tcell.KeyEscape {
+			selected.Store(&SelectedFile{Action: Stop})
+			app.Stop()
+			return nil
+		}
+		if r == 'r' {
+			position, _ := table.GetSelection()
+			selected.Store(&SelectedFile{Action: Refresh, Position: position})
+			app.Stop()
+			return nil
+		}
+		if r == 'o' {
+			position, _ := table.GetSelection()
+			f := getFileAtPosition(position)
+			if f == nil {
+				return nil
+			}
+			if f.IsDir {
+				f.Action = OpenDir
+			} else {
+				f.Action = OpenFile
+			}
+			selected.Store(f)
 			app.Stop()
 			return nil
 		}
@@ -124,27 +161,28 @@ func TableOfFiles(dirname string, files []os.FileInfo, remote bool) (SelectedFil
 		row++
 	}
 
-	table.SetSelectedFunc(func(row, _ int) {
-		if row == 0 {
+	table.Select(position, 0)
+
+	table.SetSelectedFunc(func(position, _ int) {
+		f := getFileAtPosition(position)
+		if f == nil {
 			return
 		}
-		if row == 1 {
-			selected.Store(SelectedFile{Name: ".."})
-			app.Stop()
-			return
+		if f.IsDir {
+			f.Action = OpenDir
+		} else {
+			f.Action = ViewFile
 		}
-		f := allfiles[row-2]
-		if f.IsDir() || f.Mode().IsRegular() {
-			selected.Store(SelectedFile{Name: f.Name(), Size: f.Size(), Mode: f.Mode()})
-		}
+		selected.Store(f)
 		app.Stop()
 	})
 
 	err := app.SetRoot(table, true).Run()
-	return selected.Load().(SelectedFile), err
+	return selected.Load().(*SelectedFile), err
 }
 
 func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {
+	// TODO: long should return more information
 	maxlen := int(1)
 	if len(files) != 0 {
 		maxlen += linq.From(files).SelectT(func(info Unixfile) int {

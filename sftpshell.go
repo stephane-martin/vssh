@@ -1615,6 +1615,7 @@ func (s *shellstate) edit(args []string, flags *strset.Set) error {
 }
 
 func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Client, out io.Writer) error {
+	// TODO: -d, -R, -S, -X
 	var stat func(path string) (os.FileInfo, error)
 	var readdir func(string) ([]os.FileInfo, error)
 	if client == nil {
@@ -1714,67 +1715,81 @@ func (s *shellstate) ls(args []string, flags *strset.Set) error {
 }
 
 func (s *shellstate) lll(args []string, flags *strset.Set) error {
-	// TODO: focus on the right line
+	var position int = 1
 	for {
 		files, err := ioutil.ReadDir(s.LocalWD)
 		if err != nil {
 			return err
 		}
-		selected, err := lib.TableOfFiles(s.LocalWD, files, false)
+		selected, err := lib.TableOfFiles(s.LocalWD, files, position, false)
 		if err != nil {
 			return err
 		}
-		if selected.Name == "" {
+		if selected == nil || selected.Action == lib.Stop {
 			return nil
 		}
-		if selected.Name == ".." {
-			err := s.lcd([]string{".."}, strset.New())
-			if err != nil {
-				return err
-			}
-		} else if selected.Mode.IsDir() {
+		switch selected.Action {
+		case lib.OpenDir:
 			err := s.lcd([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
-		} else {
+			position = 1
+		case lib.ViewFile:
 			err := s.lless([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
+			position = selected.Position
+		case lib.Refresh:
+			position = selected.Position
+		case lib.OpenFile:
+			err := s.lopen([]string{selected.Name}, strset.New())
+			if err != nil {
+				return err
+			}
+			position = selected.Position
 		}
 	}
 }
 
 func (s *shellstate) ll(args []string, flags *strset.Set) error {
+	var position int = 1
 	for {
 		files, err := s.client.ReadDir(s.RemoteWD)
 		if err != nil {
 			return fmt.Errorf("error listing directory: %s", err)
 		}
-		selected, err := lib.TableOfFiles(s.RemoteWD, files, true)
+		selected, err := lib.TableOfFiles(s.RemoteWD, files, position, true)
 		if err != nil {
 			return err
 		}
-		if selected.Name == "" {
+		if selected == nil || selected.Action == lib.Stop {
 			return nil
 		}
-		if selected.Name == ".." {
-			err := s.cd([]string{".."}, strset.New())
-			if err != nil {
-				return err
-			}
-		} else if selected.Mode.IsDir() {
+		switch selected.Action {
+		case lib.OpenDir:
 			err := s.cd([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
-		} else {
+			position = 1
+		case lib.ViewFile:
 			err := s.less([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
+			position = selected.Position
+		case lib.Refresh:
+			position = selected.Position
+		case lib.OpenFile:
+			err := s.open([]string{selected.Name}, strset.New())
+			if err != nil {
+				return err
+			}
+			position = selected.Position
 		}
+
 	}
 }
 
