@@ -1430,6 +1430,11 @@ func (s *shellstate) open(args []string, flags *strset.Set) error {
 }
 
 func (s *shellstate) ledit(args []string, flags *strset.Set) error {
+	state, err := terminal.GetState(syscall.Stdin)
+	if err != nil {
+		return err
+	}
+	defer terminal.Restore(syscall.Stdin, state)
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "vim"
@@ -1788,6 +1793,29 @@ func (s *shellstate) lll(args []string, flags *strset.Set) error {
 			}
 			return files, nil
 		}
+		if f.Action == lib.DeleteDir {
+			err := s.lrmdir([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := ioutil.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+
+		if f.Action == lib.EditFile {
+			err := s.ledit([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := ioutil.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
 
 		return nil, fmt.Errorf("unknown action: %d", f.Action)
 	}
@@ -1802,6 +1830,9 @@ func (s *shellstate) lll(args []string, flags *strset.Set) error {
 	s.report = false
 	err := lib.TableOfFiles(s.LocalWD, callback, readFile, false)
 	s.report = true
+	if err == lib.ErrSwitch {
+		return s.ll(args, flags)
+	}
 	return err
 }
 
@@ -1840,6 +1871,29 @@ func (s *shellstate) ll(args []string, flags *strset.Set) error {
 			}
 			return files, nil
 		}
+		if f.Action == lib.DeleteDir {
+			err := s.rmdir([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := s.client.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+
+		if f.Action == lib.EditFile {
+			err := s.edit([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := s.client.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
 
 		return nil, fmt.Errorf("unknown action: %d", f.Action)
 	}
@@ -1861,6 +1915,9 @@ func (s *shellstate) ll(args []string, flags *strset.Set) error {
 	s.report = false
 	err := lib.TableOfFiles(s.RemoteWD, callback, readFile, true)
 	s.report = true
+	if err == lib.ErrSwitch {
+		return s.lll(args, flags)
+	}
 	return err
 }
 
@@ -1868,6 +1925,12 @@ func (s *shellstate) cowsay(args []string, flags *strset.Set) error {
 	say := "MOO"
 	if len(args) > 0 {
 		say = args[0]
+	} else {
+		c := exec.Command("fortune", "-s", "-u", "-a")
+		out, err := c.Output()
+		if err == nil {
+			say = string(out)
+		}
 	}
 	r, err := cowsay.Say(
 		cowsay.Phrase(say),

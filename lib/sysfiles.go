@@ -16,12 +16,11 @@ type SelectedCallback func(*SelectedFile) ([]os.FileInfo, error)
 
 const (
 	Init SelectedAction = iota
-	ViewFile
 	OpenDir
 	OpenFile
 	DeleteFile
-	Refresh
-	Stop
+	DeleteDir
+	EditFile
 )
 
 type SelectedFile struct {

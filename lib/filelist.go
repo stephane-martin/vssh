@@ -2,12 +2,14 @@ package lib
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ahmetb/go-linq"
@@ -16,15 +18,29 @@ import (
 	"github.com/rivo/tview"
 )
 
+var ErrSwitch = errors.New("switch")
+
 type tableOfFiles struct {
 	app      *tview.Application
 	pages    *tview.Pages
 	table    *tview.Table
 	files    *Unixfiles
-	rerr     chan error
+	err      error
+	errlock  sync.Mutex
 	callback SelectedCallback
 	readFile func(string) ([]byte, error)
 	remote   bool
+}
+
+func (table *tableOfFiles) setErr(err error) {
+	if err == nil {
+		return
+	}
+	table.errlock.Lock()
+	if table.err == nil {
+		table.err = err
+	}
+	table.errlock.Unlock()
 }
 
 func (table *tableOfFiles) fill() {
@@ -35,10 +51,7 @@ func (table *tableOfFiles) fill() {
 	maxGroupLength := table.files.maxGroupLength()
 
 	abort := func(e error) {
-		if e != nil {
-			table.rerr <- e
-		}
-		close(table.rerr)
+		table.setErr(e)
 		table.app.Stop()
 	}
 
@@ -97,6 +110,10 @@ func (table *tableOfFiles) fill() {
 			}
 			return nil
 		}
+		if r == 's' {
+			abort(ErrSwitch)
+			return nil
+		}
 		if r == 'r' {
 			files, err := table.callback(nil)
 			if err != nil {
@@ -108,6 +125,33 @@ func (table *tableOfFiles) fill() {
 			table.table.Select(1, 0)
 			return nil
 		}
+		if r == 'e' {
+			position, _ := table.table.GetSelection()
+			f := table.files.getSelectedFile(position)
+			if f == nil {
+				return nil
+			}
+			if f.IsDir {
+				return nil
+			}
+			if f.Mode.IsRegular() {
+				f.Action = EditFile
+				var files []os.FileInfo
+				var err error
+				table.app.Suspend(func() {
+					files, err = table.callback(f)
+				})
+				if err != nil {
+					abort(err)
+					return nil
+				}
+				table.files.Init(files, table.remote)
+				table.fill()
+				table.table.Select(1, 0)
+			}
+			return nil
+		}
+
 		if r == 'o' {
 			position, _ := table.table.GetSelection()
 			f := table.files.getSelectedFile(position)
@@ -146,6 +190,24 @@ func (table *tableOfFiles) fill() {
 				if f.Name == ".." {
 					return nil
 				}
+				modal := tview.NewModal().
+					SetText(fmt.Sprintf("Do you want to delete the directory?\n[blue]%s[-]", f.Name)).
+					AddButtons([]string{"Delete", "Cancel"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						table.pages.RemovePage("confirmDelete")
+						if buttonLabel == "Delete" {
+							f.Action = DeleteDir
+							files, err := table.callback(f)
+							if err != nil {
+								abort(err)
+								return
+							}
+							table.files.Init(files, table.remote)
+							table.fill()
+							table.table.Select(1, 0)
+						}
+					})
+				table.pages.AddPage("confirmDelete", modal, true, true)
 				return nil
 			}
 			if f.Mode.IsRegular() {
@@ -235,7 +297,6 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	table.callback = callback
 	table.readFile = readFile
 	table.remote = remote
-	table.rerr = make(chan error)
 	files, err := callback(nil)
 	if err != nil {
 		return err
@@ -246,19 +307,24 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	table.app = tview.NewApplication()
 	table.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
 		if ev.Key() == tcell.KeyCtrlC {
-			close(table.rerr)
 			table.app.Stop()
 			return nil
 		}
 		return ev
 	})
-
+	title := fmt.Sprintf(" [violet]%s[-] (%%s) ", wd)
+	if remote {
+		title = fmt.Sprintf(title, "remote")
+	} else {
+		title = fmt.Sprintf(title, "local")
+	}
 	table.table = tview.NewTable().SetBorders(false).SetFixed(1, 0)
 	table.pages = tview.NewPages()
 	table.pages.AddPage("table", table.table, true, true)
 	table.table.SetSelectable(true, false)
 	table.table.SetSelectedStyle(tcell.ColorRed, tcell.ColorDefault, tcell.AttrBold)
-	table.table.SetBorder(true).SetBorderPadding(1, 0, 1, 1).SetTitle(" " + wd + " ")
+	table.table.SetBorder(true).SetBorderPadding(1, 0, 1, 1)
+	table.table.SetTitle(title)
 	table.fill()
 	table.table.Select(1, 0)
 
@@ -266,7 +332,7 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	if err != nil {
 		return err
 	}
-	return <-table.rerr
+	return table.err
 }
 
 func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {
@@ -374,7 +440,7 @@ func ShowFileInternal(fname string, content []byte) error {
 
 func ShowFileInternalWidget(fname string, content []byte) (*tview.TextView, error) {
 	box := tview.NewTextView().SetScrollable(true).SetWrap(true)
-	box.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(" " + fname + " ")
+	box.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(fmt.Sprintf(" [violet]%s[-] ", fname))
 	box.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
 			return tcell.NewEventKey(tcell.KeyDown, 'j', tcell.ModNone)
