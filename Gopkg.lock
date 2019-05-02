@@ -13,6 +13,22 @@
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
 [[projects]]
+  branch = "master"
+  digest = "1:79a86e865a8900d54fb10678d7f3f19b79668fd44dcdbf3f22bb5ec8207f7f29"
+  name = "github.com/Code-Hex/Neo-cowsay"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "97be76b50faeac564e365f937f11b4743535df7f"
+
+[[projects]]
+  branch = "master"
+  digest = "1:daa3de4636ef4efa34d059224ebde5b9480577251f334d54abad5f8904920e08"
+  name = "github.com/Code-Hex/go-wordwrap"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "ddb85795713c2218601b44b94a5e105e5028ec42"
+
+[[projects]]
   digest = "1:fd61cf4ae1953d55df708acb6b91492d538f49c305b364a014049914495db426"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
@@ -704,6 +720,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/Code-Hex/Neo-cowsay",
     "github.com/ahmetb/go-linq",
     "github.com/alecthomas/chroma/formatters",
     "github.com/alecthomas/chroma/lexers",

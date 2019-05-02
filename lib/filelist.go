@@ -17,91 +17,123 @@ import (
 	"github.com/rivo/tview"
 )
 
-func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool) (*SelectedFile, error) {
-	// TODO: modtime
-	var selected atomic.Value
-	var dirs, regulars, irregulars Unixfiles
-	for _, f := range files {
-		u, g := UserGroup(f, remote)
-		uf := Unixfile{FileInfo: f, User: u, Group: g}
-		if f.IsDir() {
-			dirs = append(dirs, uf)
-		} else if f.Mode().IsRegular() {
-			regulars = append(regulars, uf)
-		} else {
-			irregulars = append(irregulars, uf)
-		}
-	}
-	sort.Slice(dirs, func(i, j int) bool { return dirs[i].Name() < dirs[j].Name() })
-	sort.Slice(regulars, func(i, j int) bool { return regulars[i].Name() < regulars[j].Name() })
-	sort.Slice(irregulars, func(i, j int) bool { return irregulars[i].Name() < irregulars[j].Name() })
-
-	var allfiles Unixfiles = make([]Unixfile, 0, len(dirs)+len(regulars)+len(irregulars))
-	allfiles = append(allfiles, dirs...)
-	allfiles = append(allfiles, irregulars...)
-	allfiles = append(allfiles, regulars...)
-
-	getFileAtPosition := func(position int) *SelectedFile {
-		if position == 0 || (position >= (len(files) + 2)) {
-			return nil
-		}
-		if position == 1 {
-			return &SelectedFile{Name: "..", Position: position, IsDir: true}
-		}
-		f := allfiles[position-2]
-		if f.IsDir() || f.Mode().IsRegular() {
-			return &SelectedFile{Name: f.Name(), Size: f.Size(), Mode: f.Mode(), Position: position, IsDir: f.IsDir()}
-		}
-		return nil
-	}
+func fillTable(table *tview.Table, allfiles *Unixfiles, app *tview.Application, selected *atomic.Value, callback SelectedCallback, remote bool, pages *tview.Pages) {
 
 	maxNameLength := allfiles.maxNameLength()
 	maxSizeLength := allfiles.maxSizeLength()
 	maxUserLength := allfiles.maxUserLength()
 	maxGroupLength := allfiles.maxGroupLength()
 
-	app := tview.NewApplication()
-	app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyCtrlC {
-			app.Stop()
-			return nil
-		}
-		return ev
-	})
+	abort := func(e error) {
+		selected.Store(&SelectedFile{Err: e, Action: Stop})
+		app.Stop()
+	}
 
-	table := tview.NewTable().SetBorders(false).SetFixed(1, 0)
-	table.
-		SetSelectable(true, false).
-		SetSelectedStyle(tcell.ColorRed, tcell.ColorDefault, tcell.AttrBold)
-	table.SetBorder(true).SetBorderPadding(1, 0, 1, 1).SetTitle(" " + dirname + " ")
+	table.Clear()
 
 	table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		key := event.Key()
 		r := event.Rune()
 		if r == 'q' || key == tcell.KeyEscape {
-			selected.Store(&SelectedFile{Action: Stop})
-			app.Stop()
+			abort(nil)
 			return nil
 		}
-		if r == 'r' {
+		if key == tcell.KeyEnter {
 			position, _ := table.GetSelection()
-			selected.Store(&SelectedFile{Action: Refresh, Position: position})
-			app.Stop()
-			return nil
-		}
-		if r == 'o' {
-			position, _ := table.GetSelection()
-			f := getFileAtPosition(position)
+			f := allfiles.getSelectedFile(position)
 			if f == nil {
 				return nil
 			}
 			if f.IsDir {
 				f.Action = OpenDir
-			} else {
-				f.Action = OpenFile
+				files, err := callback(f)
+				if err != nil {
+					abort(err)
+					return nil
+				}
+				allfiles.Init(files, remote)
+				fillTable(table, allfiles, app, selected, callback, remote, pages)
+				table.Select(1, 0)
+				return nil
 			}
-			selected.Store(f)
-			app.Stop()
+			if f.Mode.IsRegular() {
+				f.Action = ViewFile
+				selected.Store(f)
+				app.Stop()
+			}
+			return nil
+		}
+		if r == 'r' {
+			files, err := callback(nil)
+			if err != nil {
+				abort(err)
+				return nil
+			}
+			allfiles.Init(files, remote)
+			fillTable(table, allfiles, app, selected, callback, remote, pages)
+			table.Select(1, 0)
+			return nil
+		}
+		if r == 'o' {
+			position, _ := table.GetSelection()
+			f := allfiles.getSelectedFile(position)
+			if f == nil {
+				return nil
+			}
+			if f.IsDir {
+				f.Action = OpenDir
+				files, err := callback(f)
+				if err != nil {
+					abort(err)
+					return nil
+				}
+				allfiles.Init(files, remote)
+				fillTable(table, allfiles, app, selected, callback, remote, pages)
+				table.Select(1, 0)
+				return nil
+			}
+			if f.Mode.IsRegular() {
+				f.Action = OpenFile
+				_, err := callback(f)
+				if err != nil {
+					abort(err)
+					return nil
+				}
+			}
+			return nil
+		}
+		if r == 'D' {
+			position, _ := table.GetSelection()
+			f := allfiles.getSelectedFile(position)
+			if f == nil {
+				return nil
+			}
+			if f.IsDir {
+				if f.Name == ".." {
+					return nil
+				}
+				return nil
+			}
+			if f.Mode.IsRegular() {
+				modal := tview.NewModal().
+					SetText(fmt.Sprintf("Do you want to delete the file?\n[blue]%s[-]", f.Name)).
+					AddButtons([]string{"Delete", "Cancel"}).
+					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+						pages.RemovePage("confirmDelete")
+						if buttonLabel == "Delete" {
+							f.Action = DeleteFile
+							files, err := callback(f)
+							if err != nil {
+								abort(err)
+								return
+							}
+							allfiles.Init(files, remote)
+							fillTable(table, allfiles, app, selected, callback, remote, pages)
+							table.Select(1, 0)
+						}
+					})
+				pages.AddPage("confirmDelete", modal, true, true)
+			}
 			return nil
 		}
 		return event
@@ -119,7 +151,7 @@ func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool
 	row++
 	table.SetCell(row, 0, tview.NewTableCell("..").SetTextColor(tcell.ColorBlue))
 	row++
-	for _, d := range dirs {
+	for _, d := range allfiles.Dirs {
 		c := tview.NewTableCell(d.paddedName(maxNameLength))
 		if strings.HasPrefix(d.Name(), ".") {
 			c.SetTextColor(tcell.ColorBlue)
@@ -133,7 +165,7 @@ func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool
 		table.SetCell(row, 5, tview.NewTableCell(d.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorDarkGray))
 		row++
 	}
-	for _, irr := range irregulars {
+	for _, irr := range allfiles.Irregulars {
 		c := tview.NewTableCell(irr.paddedName(maxNameLength)).SetTextColor(tcell.ColorRed)
 		table.SetCell(row, 0, c)
 		table.SetCell(row, 2, tview.NewTableCell(irr.paddedUser(maxUserLength)).SetTextColor(tcell.ColorYellow))
@@ -141,7 +173,7 @@ func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool
 		table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", irr.Mode().Perm())).SetTextColor(tcell.ColorYellow))
 		row++
 	}
-	for _, reg := range regulars {
+	for _, reg := range allfiles.Regulars {
 		c := tview.NewTableCell(reg.paddedName(maxNameLength))
 		color := tcell.ColorDefault
 		if (reg.Mode().Perm() & 0100) != 0 {
@@ -161,10 +193,8 @@ func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool
 		row++
 	}
 
-	table.Select(position, 0)
-
 	table.SetSelectedFunc(func(position, _ int) {
-		f := getFileAtPosition(position)
+		f := allfiles.getSelectedFile(position)
 		if f == nil {
 			return
 		}
@@ -177,8 +207,48 @@ func TableOfFiles(dirname string, files []os.FileInfo, position int, remote bool
 		app.Stop()
 	})
 
-	err := app.SetRoot(table, true).Run()
-	return selected.Load().(*SelectedFile), err
+}
+
+func TableOfFiles(wd string, callback SelectedCallback, position int, remote bool) (*SelectedFile, error) {
+	// TODO: modtime
+	var selected atomic.Value
+	files, err := callback(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	allfiles := new(Unixfiles)
+	allfiles.Init(files, remote)
+
+	app := tview.NewApplication()
+	app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		if ev.Key() == tcell.KeyCtrlC {
+			selected.Store(&SelectedFile{Action: Stop})
+			app.Stop()
+			return nil
+		}
+		return ev
+	})
+
+	table := tview.NewTable().SetBorders(false).SetFixed(1, 0)
+	pages := tview.NewPages()
+	pages.AddPage("table", table, true, true)
+	table.SetSelectable(true, false)
+	table.SetSelectedStyle(tcell.ColorRed, tcell.ColorDefault, tcell.AttrBold)
+	table.SetBorder(true).SetBorderPadding(1, 0, 1, 1).SetTitle(" " + wd + " ")
+	fillTable(table, allfiles, app, &selected, callback, remote, pages)
+	table.Select(position, 0)
+
+	err = app.SetRoot(pages, true).Run()
+	s := selected.Load()
+	if s == nil {
+		return nil, nil
+	}
+	s2 := s.(*SelectedFile)
+	if s2.Err != nil {
+		return nil, s2.Err
+	}
+	return s2, err
 }
 
 func FormatListOfFiles(width int, long bool, files []Unixfile, buf io.Writer) {

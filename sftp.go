@@ -260,7 +260,7 @@ func sftpCommand() cli.Command {
 				"browse", "lbrowse",
 				"env", "set", "unset",
 				"exit", "logout",
-				"help",
+				"help", "cowsay",
 			}
 			line.SetCompleter(func(line string) []string {
 				args, err := shellwords.Parse(line)

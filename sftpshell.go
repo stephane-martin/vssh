@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	cowsay "github.com/Code-Hex/Neo-cowsay"
 	"github.com/cheggaaa/pb"
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-shellwords"
@@ -122,6 +123,7 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		"env":       s.env,
 		"set":       s.set,
 		"unset":     s.unset,
+		"cowsay":    s.cowsay,
 	}
 	s.completes = map[string]cmpl{
 		"cd":     s.completeCd,
@@ -826,7 +828,7 @@ func (s *shellstate) lmv(args []string, flags *strset.Set) error {
 	return err
 }
 
-func (s *shellstate) mkdir(args []string, flags *strset.Set) error {
+func (s *shellstate) mkdir(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("mkdir needs at least one argument")
 	}
@@ -835,12 +837,15 @@ func (s *shellstate) mkdir(args []string, flags *strset.Set) error {
 		err := s.client.Mkdir(path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) rm(args []string, flags *strset.Set) error {
+func (s *shellstate) rm(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("rm needs at least one argument")
 	}
@@ -849,9 +854,12 @@ func (s *shellstate) rm(args []string, flags *strset.Set) error {
 		err := s.client.Remove(path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
 func _rmdir(client *sftp.Client, dirname string) (e error) {
@@ -891,7 +899,7 @@ func _rmdir(client *sftp.Client, dirname string) (e error) {
 
 }
 
-func (s *shellstate) rmdir(args []string, flags *strset.Set) error {
+func (s *shellstate) rmdir(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("rmdir needs at least one argument")
 	}
@@ -900,12 +908,15 @@ func (s *shellstate) rmdir(args []string, flags *strset.Set) error {
 		err := _rmdir(s.client, path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) mkdirall(args []string, flags *strset.Set) error {
+func (s *shellstate) mkdirall(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("mkdirall needs at least one argument")
 	}
@@ -914,12 +925,15 @@ func (s *shellstate) mkdirall(args []string, flags *strset.Set) error {
 		err := s.client.MkdirAll(path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) lmkdir(args []string, flags *strset.Set) error {
+func (s *shellstate) lmkdir(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("lmkdir needs at least one argument")
 	}
@@ -928,12 +942,15 @@ func (s *shellstate) lmkdir(args []string, flags *strset.Set) error {
 		err := os.Mkdir(path, 0755)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) lrm(args []string, flags *strset.Set) error {
+func (s *shellstate) lrm(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("lrm needs at least one argument")
 	}
@@ -942,12 +959,15 @@ func (s *shellstate) lrm(args []string, flags *strset.Set) error {
 		err := os.Remove(path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) lrmdir(args []string, flags *strset.Set) error {
+func (s *shellstate) lrmdir(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("lrmdir needs at least one argument")
 	}
@@ -956,12 +976,15 @@ func (s *shellstate) lrmdir(args []string, flags *strset.Set) error {
 		err := os.RemoveAll(path)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
-func (s *shellstate) lmkdirall(args []string, flags *strset.Set) error {
+func (s *shellstate) lmkdirall(args []string, flags *strset.Set) (e error) {
 	if len(args) == 0 {
 		return errors.New("lmkdirall needs at least one argument")
 	}
@@ -970,9 +993,12 @@ func (s *shellstate) lmkdirall(args []string, flags *strset.Set) error {
 		err := os.MkdirAll(path, 0755)
 		if err != nil {
 			s.err("%s: %s", name, err)
+			if e == nil {
+				e = err
+			}
 		}
 	}
-	return nil
+	return e
 }
 
 func (s *shellstate) less(args []string, flags *strset.Set) error {
@@ -1717,11 +1743,44 @@ func (s *shellstate) ls(args []string, flags *strset.Set) error {
 func (s *shellstate) lll(args []string, flags *strset.Set) error {
 	var position int = 1
 	for {
-		files, err := ioutil.ReadDir(s.LocalWD)
-		if err != nil {
-			return err
+		callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
+			if f == nil || f.Action == lib.Init {
+				files, err := ioutil.ReadDir(s.LocalWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+
+			}
+			if f.Action == lib.OpenDir {
+				err := s.lcd([]string{f.Name}, strset.New())
+				if err != nil {
+					return nil, err
+				}
+				files, err := ioutil.ReadDir(s.LocalWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+			}
+			if f.Action == lib.OpenFile {
+				return nil, s.lopen([]string{f.Name}, strset.New())
+			}
+			if f.Action == lib.DeleteFile {
+				err := s.lrm([]string{f.Name}, strset.New())
+				if err != nil {
+					return nil, err
+				}
+				files, err := ioutil.ReadDir(s.LocalWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+			}
+
+			return nil, fmt.Errorf("unknown action: %d", f.Action)
 		}
-		selected, err := lib.TableOfFiles(s.LocalWD, files, position, false)
+		selected, err := lib.TableOfFiles(s.LocalWD, callback, position, false)
 		if err != nil {
 			return err
 		}
@@ -1729,19 +1788,11 @@ func (s *shellstate) lll(args []string, flags *strset.Set) error {
 			return nil
 		}
 		switch selected.Action {
-		case lib.OpenDir:
-			err := s.lcd([]string{selected.Name}, strset.New())
-			if err != nil {
-				return err
-			}
-			position = 1
 		case lib.ViewFile:
 			err := s.lless([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
-			position = selected.Position
-		case lib.Refresh:
 			position = selected.Position
 		case lib.OpenFile:
 			err := s.lopen([]string{selected.Name}, strset.New())
@@ -1756,11 +1807,33 @@ func (s *shellstate) lll(args []string, flags *strset.Set) error {
 func (s *shellstate) ll(args []string, flags *strset.Set) error {
 	var position int = 1
 	for {
-		files, err := s.client.ReadDir(s.RemoteWD)
-		if err != nil {
-			return fmt.Errorf("error listing directory: %s", err)
+		callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
+			if f == nil || f.Action == lib.Init {
+				files, err := s.client.ReadDir(s.RemoteWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+
+			}
+			if f.Action == lib.OpenDir {
+				err := s.cd([]string{f.Name}, strset.New())
+				if err != nil {
+					return nil, err
+				}
+				files, err := s.client.ReadDir(s.RemoteWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+			}
+			if f.Action == lib.OpenFile {
+				return nil, s.open([]string{f.Name}, strset.New())
+			}
+			return nil, fmt.Errorf("unknown action: %d", f.Action)
 		}
-		selected, err := lib.TableOfFiles(s.RemoteWD, files, position, true)
+
+		selected, err := lib.TableOfFiles(s.RemoteWD, callback, position, true)
 		if err != nil {
 			return err
 		}
@@ -1768,29 +1841,30 @@ func (s *shellstate) ll(args []string, flags *strset.Set) error {
 			return nil
 		}
 		switch selected.Action {
-		case lib.OpenDir:
-			err := s.cd([]string{selected.Name}, strset.New())
-			if err != nil {
-				return err
-			}
-			position = 1
 		case lib.ViewFile:
 			err := s.less([]string{selected.Name}, strset.New())
 			if err != nil {
 				return err
 			}
 			position = selected.Position
-		case lib.Refresh:
-			position = selected.Position
-		case lib.OpenFile:
-			err := s.open([]string{selected.Name}, strset.New())
-			if err != nil {
-				return err
-			}
-			position = selected.Position
 		}
-
 	}
+}
+
+func (s *shellstate) cowsay(args []string, flags *strset.Set) error {
+	say := "MOO"
+	if len(args) > 0 {
+		say = args[0]
+	}
+	r, err := cowsay.Say(
+		cowsay.Phrase(say),
+	)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(s.out, r)
+	fmt.Fprintln(s.out)
+	return nil
 }
 
 func base(s string) string {

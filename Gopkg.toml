@@ -98,6 +98,10 @@
   name = "github.com/orcaman/concurrent-map"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/Code-Hex/Neo-cowsay"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true
