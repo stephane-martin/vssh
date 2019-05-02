@@ -1830,6 +1830,18 @@ func (s *shellstate) ll(args []string, flags *strset.Set) error {
 			if f.Action == lib.OpenFile {
 				return nil, s.open([]string{f.Name}, strset.New())
 			}
+			if f.Action == lib.DeleteFile {
+				err := s.rm([]string{f.Name}, strset.New())
+				if err != nil {
+					return nil, err
+				}
+				files, err := s.client.ReadDir(s.LocalWD)
+				if err != nil {
+					return nil, err
+				}
+				return files, nil
+			}
+
 			return nil, fmt.Errorf("unknown action: %d", f.Action)
 		}
 
