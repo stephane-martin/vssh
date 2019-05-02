@@ -60,6 +60,7 @@ type shellstate struct {
 	err           func(string, ...interface{})
 	out           io.Writer
 	environ       map[string]string
+	report        bool
 }
 
 func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoFunc func(string, ...interface{}), errFunc func(string, ...interface{})) (*shellstate, error) {
@@ -78,11 +79,23 @@ func newShellState(client *sftp.Client, externalPager bool, out io.Writer, infoF
 		client:        client,
 		externalPager: externalPager,
 		tempfiles:     strset.New(),
-		info:          infoFunc,
-		err:           errFunc,
 		out:           out,
 		environ:       make(map[string]string),
+		report:        true,
 	}
+
+	s.info = func(f string, args ...interface{}) {
+		if s.report {
+			infoFunc(f, args...)
+		}
+	}
+
+	s.err = func(f string, args ...interface{}) {
+		if s.report {
+			errFunc(f, args...)
+		}
+	}
+
 	s.methods = map[string]command{
 		"less":      s.less,
 		"lless":     s.lless,
@@ -1741,126 +1754,114 @@ func (s *shellstate) ls(args []string, flags *strset.Set) error {
 }
 
 func (s *shellstate) lll(args []string, flags *strset.Set) error {
-	var position int = 1
-	for {
-		callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
-			if f == nil || f.Action == lib.Init {
-				files, err := ioutil.ReadDir(s.LocalWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-
-			}
-			if f.Action == lib.OpenDir {
-				err := s.lcd([]string{f.Name}, strset.New())
-				if err != nil {
-					return nil, err
-				}
-				files, err := ioutil.ReadDir(s.LocalWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-			}
-			if f.Action == lib.OpenFile {
-				return nil, s.lopen([]string{f.Name}, strset.New())
-			}
-			if f.Action == lib.DeleteFile {
-				err := s.lrm([]string{f.Name}, strset.New())
-				if err != nil {
-					return nil, err
-				}
-				files, err := ioutil.ReadDir(s.LocalWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-			}
-
-			return nil, fmt.Errorf("unknown action: %d", f.Action)
-		}
-		selected, err := lib.TableOfFiles(s.LocalWD, callback, position, false)
-		if err != nil {
-			return err
-		}
-		if selected == nil || selected.Action == lib.Stop {
-			return nil
-		}
-		switch selected.Action {
-		case lib.ViewFile:
-			err := s.lless([]string{selected.Name}, strset.New())
+	callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
+		if f == nil || f.Action == lib.Init {
+			files, err := ioutil.ReadDir(s.LocalWD)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			position = selected.Position
-		case lib.OpenFile:
-			err := s.lopen([]string{selected.Name}, strset.New())
-			if err != nil {
-				return err
-			}
-			position = selected.Position
+			return files, nil
+
 		}
+		if f.Action == lib.OpenDir {
+			err := s.lcd([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := ioutil.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+		if f.Action == lib.OpenFile {
+			return nil, s.lopen([]string{f.Name}, strset.New())
+		}
+		if f.Action == lib.DeleteFile {
+			err := s.lrm([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := ioutil.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+
+		return nil, fmt.Errorf("unknown action: %d", f.Action)
 	}
+	readFile := func(fname string) ([]byte, error) {
+		fname = join(s.LocalWD, fname)
+		content, err := ioutil.ReadFile(fname)
+		if err != nil {
+			return nil, err
+		}
+		return content, nil
+	}
+	s.report = false
+	err := lib.TableOfFiles(s.LocalWD, callback, readFile, false)
+	s.report = true
+	return err
 }
 
 func (s *shellstate) ll(args []string, flags *strset.Set) error {
-	var position int = 1
-	for {
-		callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
-			if f == nil || f.Action == lib.Init {
-				files, err := s.client.ReadDir(s.RemoteWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-
-			}
-			if f.Action == lib.OpenDir {
-				err := s.cd([]string{f.Name}, strset.New())
-				if err != nil {
-					return nil, err
-				}
-				files, err := s.client.ReadDir(s.RemoteWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-			}
-			if f.Action == lib.OpenFile {
-				return nil, s.open([]string{f.Name}, strset.New())
-			}
-			if f.Action == lib.DeleteFile {
-				err := s.rm([]string{f.Name}, strset.New())
-				if err != nil {
-					return nil, err
-				}
-				files, err := s.client.ReadDir(s.LocalWD)
-				if err != nil {
-					return nil, err
-				}
-				return files, nil
-			}
-
-			return nil, fmt.Errorf("unknown action: %d", f.Action)
-		}
-
-		selected, err := lib.TableOfFiles(s.RemoteWD, callback, position, true)
-		if err != nil {
-			return err
-		}
-		if selected == nil || selected.Action == lib.Stop {
-			return nil
-		}
-		switch selected.Action {
-		case lib.ViewFile:
-			err := s.less([]string{selected.Name}, strset.New())
+	callback := func(f *lib.SelectedFile) ([]os.FileInfo, error) {
+		if f == nil || f.Action == lib.Init {
+			files, err := s.client.ReadDir(s.RemoteWD)
 			if err != nil {
-				return err
+				return nil, err
 			}
-			position = selected.Position
+			return files, nil
+
 		}
+		if f.Action == lib.OpenDir {
+			err := s.cd([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := s.client.ReadDir(s.RemoteWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+		if f.Action == lib.OpenFile {
+			return nil, s.open([]string{f.Name}, strset.New())
+		}
+		if f.Action == lib.DeleteFile {
+			err := s.rm([]string{f.Name}, strset.New())
+			if err != nil {
+				return nil, err
+			}
+			files, err := s.client.ReadDir(s.LocalWD)
+			if err != nil {
+				return nil, err
+			}
+			return files, nil
+		}
+
+		return nil, fmt.Errorf("unknown action: %d", f.Action)
 	}
+
+	readFile := func(fname string) ([]byte, error) {
+		fname = join(s.RemoteWD, fname)
+		f, err := s.client.Open(fname)
+		if err != nil {
+			return nil, err
+		}
+		content, err := ioutil.ReadAll(f)
+		_ = f.Close()
+		if err != nil {
+			return nil, err
+		}
+		return content, nil
+	}
+
+	s.report = false
+	err := lib.TableOfFiles(s.RemoteWD, callback, readFile, true)
+	s.report = true
+	return err
 }
 
 func (s *shellstate) cowsay(args []string, flags *strset.Set) error {
