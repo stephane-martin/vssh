@@ -25,6 +25,7 @@ func App() *cli.App {
 		tunnelCommand(),
 		resolveCommand(),
 		socksCommand(),
+		httpProxyCommand(),
 		cli.Command{
 			Name:  "version",
 			Usage: "print vssh version",

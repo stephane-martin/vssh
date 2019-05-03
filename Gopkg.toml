@@ -102,6 +102,10 @@
   name = "github.com/Code-Hex/Neo-cowsay"
   branch = "master"
 
+[[constraint]]
+  name = "github.com/elazarl/goproxy"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true

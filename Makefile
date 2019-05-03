@@ -24,6 +24,7 @@ ${BINARY}_debug: ${SOURCES}
 ${BINARY}: ${SOURCES}
 	env CGO_ENABLED=0 go build -tags 'netgo osusergo' -o ${BINARY} ${LDFLAGS_RELEASE} ${FULL}
 	upx --best ${BINARY}
+	gpg --detach-sign --armor ${BINARY}
 
 editdoc:
 	nohup restview README.rst 1>/dev/null 2>/dev/null &

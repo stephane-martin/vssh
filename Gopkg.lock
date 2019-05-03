@@ -131,6 +131,14 @@
   version = "v1.13.1"
 
 [[projects]]
+  branch = "master"
+  digest = "1:d754d24358cf013301a804cdab95cbcbe0da83902dc24ee20e98a899c4dd48e0"
+  name = "github.com/elazarl/goproxy"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9d40249d3c2f14d1a9d75e070a738362adeb5a83"
+
+[[projects]]
   digest = "1:f84649b065e44256426db07fd03648778f7ab4557eeda09d24e9c47897b485c7"
   name = "github.com/gabriel-vasile/mimetype"
   packages = [
@@ -727,6 +735,7 @@
     "github.com/alecthomas/chroma/styles",
     "github.com/awnumar/memguard",
     "github.com/cheggaaa/pb",
+    "github.com/elazarl/goproxy",
     "github.com/gabriel-vasile/mimetype",
     "github.com/gdamore/tcell",
     "github.com/getlantern/go-socks5",
