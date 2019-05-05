@@ -126,7 +126,12 @@ func GlobalFlags() []cli.Flag {
 			Usage:  "Vault signing role",
 			EnvVar: "VAULT_SSH_ROLE",
 		},
-
+		cli.StringFlag{
+			Name:   "http-proxy,httpproxy",
+			Usage:  "specify a URL to connect through a HTTP proxy",
+			Value:  "",
+			EnvVar: "SSH_HTTP_PROXY",
+		},
 		cli.StringFlag{
 			Name:   "login,l",
 			Usage:  "SSH remote user",

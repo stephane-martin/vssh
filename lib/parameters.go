@@ -1,5 +1,7 @@
 package lib
 
+import "net/url"
+
 type VaultParams struct {
 	Address    string
 	Token      string
@@ -17,6 +19,7 @@ type SSHParams struct {
 	LoginName string
 	Host      string
 	Commands  []string
+	HTTPProxy *url.URL
 }
 
 type Params struct {

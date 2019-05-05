@@ -115,15 +115,14 @@ func sshAction(clictx *cli.Context) (e error) {
 	secretPaths := clictx.StringSlice("secret")
 	var secrets map[string]string
 	if len(secretPaths) > 0 {
-		if client != nil {
-			res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
-			if err != nil {
-				return err
-			}
-			secrets = res
-		} else {
-			logger.Warnw("can't read secrets from vault: no vault client")
+		if client == nil {
+			return errors.New("can't read secrets from vault: no vault client")
 		}
+		res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
+		if err != nil {
+			return err
+		}
+		secrets = res
 	}
 
 	// TODO: restore native connect

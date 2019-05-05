@@ -26,17 +26,18 @@ type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, 
 
 func SFTPClient(params SSHParams, methods []ssh.AuthMethod, l *zap.SugaredLogger) (*sftp.Client, error) {
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: methods,
+		User:      params.LoginName,
+		Host:      params.Host,
+		Port:      params.Port,
+		Auth:      methods,
+		HTTPProxy: params.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return nil, err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.SFTP(cfg)
+	client, err := gssh.SFTP(context.Background(), cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -48,17 +49,18 @@ func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, 
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: auth,
+		User:      params.LoginName,
+		Host:      params.Host,
+		Port:      params.Port,
+		Auth:      auth,
+		HTTPProxy: params.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.SFTP(cfg)
+	client, err := gssh.SFTP(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -88,17 +90,18 @@ func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ss
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: auth,
+		User:      params.LoginName,
+		Host:      params.Host,
+		Port:      params.Port,
+		Auth:      auth,
+		HTTPProxy: params.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.SFTP(cfg)
+	client, err := gssh.SFTP(ctx, cfg)
 	if err != nil {
 		return err
 	}

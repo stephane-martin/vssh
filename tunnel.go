@@ -112,17 +112,18 @@ func localTunnelAction(clictx *cli.Context) (e error) {
 	}
 
 	cfg := gssh.Config{
-		User: sshParams.LoginName,
-		Host: sshParams.Host,
-		Port: sshParams.Port,
-		Auth: methods,
+		User:      sshParams.LoginName,
+		Host:      sshParams.Host,
+		Port:      sshParams.Port,
+		Auth:      methods,
+		HTTPProxy: sshParams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(sshParams.Insecure, logger)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.Dial(cfg)
+	client, err := gssh.Dial(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -245,17 +246,18 @@ func remoteTunnelAction(clictx *cli.Context) (e error) {
 	}
 
 	cfg := gssh.Config{
-		User: sshParams.LoginName,
-		Host: sshParams.Host,
-		Port: sshParams.Port,
-		Auth: methods,
+		User:      sshParams.LoginName,
+		Host:      sshParams.Host,
+		Port:      sshParams.Port,
+		Auth:      methods,
+		HTTPProxy: sshParams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(sshParams.Insecure, logger)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.Dial(cfg)
+	client, err := gssh.Dial(ctx, cfg)
 	if err != nil {
 		return err
 	}

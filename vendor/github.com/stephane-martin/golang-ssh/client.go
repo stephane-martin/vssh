@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/moby/moby/pkg/term"
 	"github.com/pkg/sftp"
@@ -34,8 +34,8 @@ type Config struct {
 	ClientVersion string              // ssh client version, "SSH-2.0-Go" by default
 	Port          int                 // port to connect to, 22 by default
 	Auth          []ssh.AuthMethod    // authentication methods to use
-	Timeout       time.Duration       // connect timeout, 30s by default
 	HostKey       ssh.HostKeyCallback // callback for verifying server keys, ssh.InsecureIgnoreHostKey by default
+	HTTPProxy     *url.URL
 }
 
 func (cfg Config) Version() string {
@@ -50,13 +50,6 @@ func (cfg Config) GetPort() int {
 		return cfg.Port
 	}
 	return 22
-}
-
-func (cfg Config) GetTimeout() time.Duration {
-	if cfg.Timeout != 0 {
-		return cfg.Timeout
-	}
-	return 15 * time.Second
 }
 
 func (cfg Config) GetHostKeyCallback() ssh.HostKeyCallback {
@@ -78,14 +71,13 @@ func (cfg Config) ToNatives() []*ssh.ClientConfig {
 			Auth:            []ssh.AuthMethod{auth},
 			ClientVersion:   cfg.Version(),
 			HostKeyCallback: cfg.GetHostKeyCallback(),
-			Timeout:         cfg.GetTimeout(),
 		})
 	}
 	return natives
 }
 
-func SFTP(cfg Config) (*sftp.Client, error) {
-	conn, err := Dial(cfg)
+func SFTP(ctx context.Context, cfg Config) (*sftp.Client, error) {
+	conn, err := Dial(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +88,7 @@ func SFTP(cfg Config) (*sftp.Client, error) {
 // have to call the Wait function for that.
 func StartCommand(ctx context.Context, cfg Config, command string) (*Client, error) {
 	client := &Client{Cfg: cfg}
-	conn, err := Dial(client.Cfg)
+	conn, err := Dial(ctx, client.Cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -182,11 +174,15 @@ func (client *Client) Wait() (err error) {
 	return nil
 }
 
-func Dial(config Config) (*ssh.Client, error) {
+func Dial(ctx context.Context, config Config) (*ssh.Client, error) {
 	var err error
 	var conn *ssh.Client
+	var proxy *HTTPConnectProxy
+	if config.HTTPProxy != nil {
+		proxy = NewHTTPConnectProxy(config.HTTPProxy)
+	}
 	for _, native := range config.ToNatives() {
-		conn, err = ssh.Dial("tcp", config.GetAddr(), native)
+		conn, err = dial(ctx, config.GetAddr(), native, proxy)
 		if err == nil {
 			return conn, nil
 		}
@@ -194,9 +190,37 @@ func Dial(config Config) (*ssh.Client, error) {
 	return nil, err
 }
 
+func dial(ctx context.Context, addr string, config *ssh.ClientConfig, httpProxy *HTTPConnectProxy) (*ssh.Client, error) {
+	var dialC func(ctx context.Context, network, address string) (net.Conn, error)
+	if httpProxy == nil {
+		var d net.Dialer
+		dialC = d.DialContext
+	} else {
+		dialC = httpProxy.DialContext
+	}
+	conn, err := dialC(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	c, chans, reqs, err := ssh.NewClientConn(conn, addr, config)
+	if err != nil {
+		return nil, err
+	}
+	client := ssh.NewClient(c, chans, reqs)
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			_ = client.Close()
+			return nil, ctx.Err()
+		default:
+		}
+	}
+	return client, nil
+}
+
 // Output returns the output of the command run on the remote host.
 func Output(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	conn, err := Dial(config)
+	conn, err := Dial(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -226,7 +250,7 @@ func Output(ctx context.Context, config Config, command string, stdout, stderr i
 
 // Output returns the output of the command run on the remote host as well as a pty.
 func OutputWithPty(ctx context.Context, config Config, command string, stdout, stderr io.Writer) error {
-	conn, err := Dial(config)
+	conn, err := Dial(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -281,7 +305,7 @@ func Shell(ctx context.Context, config Config, stdin io.Reader, stdout, stderr i
 	var (
 		termWidth, termHeight = 80, 24
 	)
-	conn, err := Dial(config)
+	conn, err := Dial(ctx, config)
 	if err != nil {
 		return err
 	}

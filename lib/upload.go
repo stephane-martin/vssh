@@ -97,17 +97,18 @@ func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, param
 	}
 
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
-		Auth: auth,
+		User:      params.LoginName,
+		Host:      params.Host,
+		Port:      params.Port,
+		Auth:      auth,
+		HTTPProxy: params.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
 	if err != nil {
 		return err
 	}
 	cfg.HostKey = hkcb
-	client, err := gssh.SFTP(cfg)
+	client, err := gssh.SFTP(ctx, cfg)
 	if err != nil {
 		return err
 	}

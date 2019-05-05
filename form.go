@@ -102,6 +102,7 @@ func Form(c CLIContext, sshOptions bool) (CLIContext, error) {
 	if sshOptions {
 		ctx.forceTerminalField = addCheckBox("Force pseudo-terminal", false)
 	}
+	ctx.httpProxyField = addInputField("HTTP proxy", c.HTTPProxy(), 40, nil)
 	ctx.vaultURLField = addInputField("Vault URL", c.VaultAddress(), 40, nil)
 	ctx.vaultAuthMethodField = addDropDown("Vault authentication method", authMethods, c.VaultAuthMethod())
 	ctx.vaultAuthPathField = addInputField("Vault authentication path", c.VaultAuthPath(), 40, nil)
@@ -171,6 +172,7 @@ type formContext struct {
 	sshPKeyField         *tview.InputField
 	sshVPKeyField        *tview.InputField
 	insecureField        *tview.Checkbox
+	httpProxyField       *tview.InputField
 	forceTerminalField   *tview.Checkbox
 	remoteCommandField   *tview.InputField
 	vaultURLField        *tview.InputField
@@ -258,6 +260,10 @@ func (ctx *formContext) SSHPassword() bool {
 
 func (ctx *formContext) SSHInsecure() bool {
 	return ctx.insecureField.IsChecked()
+}
+
+func (ctx *formContext) HTTPProxy() string {
+	return t(ctx.httpProxyField.GetText())
 }
 
 func (ctx *formContext) ForceTerminal() bool {

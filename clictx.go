@@ -17,6 +17,7 @@ type CLIContext interface {
 	SSHPort() int
 	SSHPassword() bool
 	SSHInsecure() bool
+	HTTPProxy() string
 	PrivateKey() string
 	VPrivateKey() string
 	ForceTerminal() bool
@@ -86,6 +87,10 @@ func (c cliContext) SSHPassword() bool {
 
 func (c cliContext) SSHInsecure() bool {
 	return c.ctx.GlobalBool("insecure")
+}
+
+func (c cliContext) HTTPProxy() string {
+	return c.ctx.GlobalString("http-proxy")
 }
 
 func (c cliContext) PrivateKey() string {

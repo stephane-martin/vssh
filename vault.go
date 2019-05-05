@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/user"
 	"strings"
@@ -278,5 +279,8 @@ func getSSHParams(c CLIContext) (p lib.SSHParams, err error) {
 	p.Commands = c.SSHCommand()
 	p.Insecure = c.SSHInsecure()
 	p.Port = c.SSHPort()
-	return p, nil
+	if c.HTTPProxy() != "" {
+		p.HTTPProxy, err = url.Parse(c.HTTPProxy())
+	}
+	return p, err
 }
