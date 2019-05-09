@@ -34,13 +34,13 @@ type loggingHandler struct {
 func (h loggingHandler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	t := time.Now()
 	logger := &responseLogger{w: w, status: http.StatusOK}
-	url := *req.URL
+	u := *req.URL
 
 	h.handler.ServeHTTP(logger, req)
 
 	params := LogFormatterParams{
 		Request:    req,
-		URL:        url,
+		URL:        u,
 		TimeStamp:  t,
 		StatusCode: logger.Status(),
 		Size:       logger.Size(),
