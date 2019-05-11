@@ -101,10 +101,7 @@ func (table *tableOfFiles) fill() {
 					if key == tcell.KeyESC || ev.Rune() == 'q' {
 						table.pages.RemovePage("less")
 					}
-					return event
-				})
-				w.SetDoneFunc(func(_ tcell.Key) {
-					table.pages.RemovePage("less")
+					return ev
 				})
 				table.pages.AddPage("less", w, true, true)
 			}
@@ -292,7 +289,7 @@ func (table *tableOfFiles) fill() {
 }
 
 func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([]byte, error), remote bool) error {
-	// TODO: modtime
+	// TODO: formatting modtime
 	table := new(tableOfFiles)
 	table.callback = callback
 	table.readFile = readFile
@@ -305,13 +302,7 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	table.files.Init(files, remote)
 
 	table.app = tview.NewApplication()
-	table.app.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-		if ev.Key() == tcell.KeyCtrlC {
-			table.app.Stop()
-			return nil
-		}
-		return ev
-	})
+	// TODO: table.app.SetInputCapture()
 	title := fmt.Sprintf(" [violet]%s[-] (%%s) ", wd)
 	if remote {
 		title = fmt.Sprintf(title, "remote")

@@ -85,15 +85,15 @@
   version = "v0.6.3"
 
 [[projects]]
-  digest = "1:47fd1237abeac1246a1e690f3c6c8e8c5b963b5bf946be4f9c8210453a502a11"
+  branch = "master"
+  digest = "1:0c798a20f60ce2175366326a7aac3743392460820f1a76e24b1a87d4aebc6041"
   name = "github.com/awnumar/memguard"
   packages = [
     ".",
     "memcall",
   ]
   pruneopts = "UT"
-  revision = "f431f51ecd92dc926a5084ac3e9c89080ec7edf4"
-  version = "v0.15.0"
+  revision = "3546eefb381216a1caf3242964cfe2666b7ead39"
 
 [[projects]]
   digest = "1:d219400f09c151f0ada918bab650ef46f7ebdb1ff4fea923fdcb839481ec7ec1"

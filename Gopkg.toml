@@ -20,7 +20,8 @@
 
 [[constraint]]
   name = "github.com/awnumar/memguard"
-  version = "0.15.0"
+  #version = "0.15.0"
+  branch = "master"
 
 [[constraint]]
   name = "github.com/valyala/fastjson"
