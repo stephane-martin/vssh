@@ -139,7 +139,7 @@
   revision = "9d40249d3c2f14d1a9d75e070a738362adeb5a83"
 
 [[projects]]
-  digest = "1:f84649b065e44256426db07fd03648778f7ab4557eeda09d24e9c47897b485c7"
+  digest = "1:ecd18ec0a15f037195d296b362a8adef6131bb57ac84a92dc043ec74720e8943"
   name = "github.com/gabriel-vasile/mimetype"
   packages = [
     ".",
@@ -147,8 +147,8 @@
     "internal/matchers",
   ]
   pruneopts = "UT"
-  revision = "daa3d223482c63fe56c5b544d2266200d38c62d4"
-  version = "v0.3.6"
+  revision = "31952ed4b4f94387676a3b1a50e85944be6e0a16"
+  version = "v0.3.7"
 
 [[projects]]
   digest = "1:0e16b03c72bd42739ca68d055c10369e60d17838428f512f3b29ae115ba788e0"
@@ -159,15 +159,15 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:937011a37a09b93be68052dfb3195fcfbff33b9472b37401b54027e9954906fb"
+  digest = "1:939e23f904cb50168a21dc38ca60b432a0e57482bed803fdae94223821dcad59"
   name = "github.com/gdamore/tcell"
   packages = [
     ".",
     "terminfo",
   ]
   pruneopts = "UT"
-  revision = "aaadc574a6ed8dc3abe56036ca130dcee1ee6b6e"
-  version = "v1.1.1"
+  revision = "b5d0c1ac570211e469f43ff88c0c6aa4b56cc99a"
+  version = "v1.1.2"
 
 [[projects]]
   branch = "master"
@@ -360,12 +360,12 @@
   revision = "2bc1f35cddc0cc527b4bc3dce8578fc2a6c11384"
 
 [[projects]]
-  digest = "1:4691cbb2f38f734a02226f246dbf081d9b15b249d1d6ef051b40e7e41aaf6ce5"
+  digest = "1:19cce3954c778b676622745e850f7d201eefffbb62d2c42ce87673617f96e95a"
   name = "github.com/karrick/godirwalk"
   packages = ["."]
   pruneopts = "UT"
-  revision = "d363b358f6c055cf7bb8c6f73c5f892271e850dc"
-  version = "v1.8.2"
+  revision = "5e617d9cfec6f870e63b168e9a2fb7c490a1c108"
+  version = "v1.10.3"
 
 [[projects]]
   digest = "1:31e761d97c76151dde79e9d28964a812c46efc5baee4085b86f68f0c654450de"
@@ -602,12 +602,12 @@
   version = "v1.4.1"
 
 [[projects]]
-  digest = "1:3c1a69cdae3501bf75e76d0d86dc6f2b0a7421bc205c0cb7b96b19eed464a34d"
+  digest = "1:a5158647b553c61877aa9ae74f4015000294e47981e6b8b07525edcbb0747c81"
   name = "go.uber.org/atomic"
   packages = ["."]
   pruneopts = "UT"
-  revision = "1ea20fb1cbb1cc08cbd0d913a96dead89aa18289"
-  version = "v1.3.2"
+  revision = "df976f2515e274675050de7b3f42545de80594fd"
+  version = "v1.4.0"
 
 [[projects]]
   digest = "1:60bf2a5e347af463c42ed31a493d817f8a72f102543060ed992754e689805d1a"
@@ -634,7 +634,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:2a8ad2b3ac8cccfef6d42e7331a826a490bcca702f0c6ec29aa219e4d00676ce"
+  digest = "1:27d87a906c1722feb6ce0c4a18ecb6c5a4682e857ba73972a26ea1eeb710b09e"
   name = "golang.org/x/crypto"
   packages = [
     "curve25519",
@@ -649,7 +649,7 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "a29dc8fdc73485234dbef99ebedb95d2eced08de"
+  revision = "cbcb750295291b33242907a04be40e80801d0cfc"
 
 [[projects]]
   branch = "master"
@@ -667,7 +667,7 @@
     "ipv6",
   ]
   pruneopts = "UT"
-  revision = "9ce7a6920f093fc0b908c4a5f66ae049110f417e"
+  revision = "a4d6f7feada510cc50e69a37b484cb0fdc6b7876"
 
 [[projects]]
   branch = "master"
@@ -679,7 +679,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6eb74aa473ae5121e9f3e5d7fc029c42158ee053b3108a7829001f7523488434"
+  digest = "1:ed3d25dee9c9d77611e5ce1bd3a5a078930e8efb31afac120ccb1fbba7ec08d1"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -687,7 +687,7 @@
     "windows",
   ]
   pruneopts = "UT"
-  revision = "d89cdac9e8725f2aefce25fcbfef41134c9ad412"
+  revision = "a5b02f93d862f065920dd6a40dddc66b60d0dec4"
 
 [[projects]]
   digest = "1:79c5cb4177013a706cb70478eedf23df5dc2469170b37e5b49c76cc854521701"
