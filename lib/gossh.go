@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 	"os"
 	"strings"
 
@@ -13,7 +15,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func GoConnectAuth(ctx context.Context, sshParams SSHParams, terminal bool, auth []ssh.AuthMethod, env map[string]string, l *zap.SugaredLogger) error {
+func GoConnectAuth(ctx context.Context, sshParams params.SSHParams, terminal bool, auth []ssh.AuthMethod, env map[string]string, l *zap.SugaredLogger) error {
 	if len(auth) == 0 {
 		return errors.New("no auth method")
 	}
@@ -32,7 +34,7 @@ func GoConnectAuth(ctx context.Context, sshParams SSHParams, terminal bool, auth
 	var pre []string
 	if len(env) != 0 {
 		pre = append(pre, "env")
-		pre = append(pre, EscapeEnv(env)...)
+		pre = append(pre, sys.EscapeEnv(env)...)
 		if len(sshParams.Commands) == 0 {
 			pre = append(pre, "bash")
 		}
@@ -48,7 +50,7 @@ func GoConnectAuth(ctx context.Context, sshParams SSHParams, terminal bool, auth
 	return nil
 }
 
-func GoConnect(ctx context.Context, sshParams SSHParams, terminal bool, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func GoConnect(ctx context.Context, sshParams params.SSHParams, terminal bool, privkey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	c, err := gssh.ParseCertificate(cert.Buffer())
 	if err != nil {
 		return err

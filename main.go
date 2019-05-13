@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/stephane-martin/vssh/sys"
 	"os"
 
 	"github.com/awnumar/memguard"
@@ -22,9 +23,9 @@ func main() {
 			os.Exit(code)
 		}
 	}
-	startAgent()
+	sys.StartAgent()
 	_ = app.Run(os.Args)
-	stopAgent()
+	sys.StopAgent()
 	cli.OsExiter(0)
 }
 

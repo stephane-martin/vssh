@@ -4,6 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sftpshell"
+	"github.com/stephane-martin/vssh/sys"
+	"github.com/stephane-martin/vssh/widgets"
 	"io"
 	"io/ioutil"
 	"os"
@@ -48,34 +53,34 @@ func browseCommand() cli.Command {
 				}
 			}()
 
-			params := lib.Params{
+			gparams := params.Params{
 				LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 			}
 
-			logger, err := Logger(params.LogLevel)
+			logger, err := params.Logger(gparams.LogLevel)
 			if err != nil {
 				return err
 			}
 			defer func() { _ = logger.Sync() }()
 
-			var c CLIContext = cliContext{ctx: clictx}
+			c := params.NewCliContext(clictx)
 			if c.SSHHost() == "" {
 				var err error
-				c, err = Form(c, false)
+				c, err = widgets.Form(c, false)
 				if err != nil {
 					return err
 				}
 			}
-			sshParams, err := getSSHParams(c)
+			sshParams, err := params.GetSSHParams(c)
 			if err != nil {
 				return err
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			cancelOnSignal(cancel)
+			sys.CancelOnSignal(cancel)
 
-			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+			_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 			if err != nil {
 				return err
 			}
@@ -124,7 +129,7 @@ func browseCommand() cli.Command {
 			})
 
 			g.Go(func() error {
-				return browseDir(lctx, client, addr, directory, tv)
+				return sftpshell.BrowseDir(lctx, client, addr, directory, tv)
 			})
 
 			g.Go(func() error {
@@ -155,11 +160,11 @@ func sftpCommand() cli.Command {
 				}
 			}()
 
-			params := lib.Params{
+			gparams := params.Params{
 				LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 			}
 
-			logger, err := Logger(params.LogLevel)
+			logger, err := params.Logger(gparams.LogLevel)
 			if err != nil {
 				return err
 			}
@@ -167,22 +172,22 @@ func sftpCommand() cli.Command {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			cancelOnSignal(cancel)
+			sys.CancelOnSignal(cancel)
 
-			var c CLIContext = cliContext{ctx: clictx}
+			c := params.NewCliContext(clictx)
 			if c.SSHHost() == "" {
 				var err error
-				c, err = Form(c, false)
+				c, err = widgets.Form(c, false)
 				if err != nil {
 					return err
 				}
 			}
-			sshParams, err := getSSHParams(c)
+			sshParams, err := params.GetSSHParams(c)
 			if err != nil {
 				return err
 			}
 
-			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+			_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 			if err != nil {
 				return err
 			}
@@ -206,7 +211,7 @@ func sftpCommand() cli.Command {
 			}
 			defer func() { client.Close() }()
 
-			state, err := newShellState(
+			state, err := sftpshell.NewShellState(
 				client,
 				clictx.GlobalBool("pager"),
 				os.Stdout,
@@ -302,7 +307,7 @@ func sftpCommand() cli.Command {
 		L:
 			for {
 				termWidth := state.Width() - 1
-				shortLocalWD := shorten(state.LocalWD)
+				shortLocalWD := sftpshell.Shorten(state.LocalWD)
 				promptWidth := 11 + len(state.RemoteWD) + len(shortLocalWD)
 				moreSpaces := termWidth - promptWidth
 				if moreSpaces <= 1 {
@@ -362,29 +367,29 @@ func sftpCommand() cli.Command {
 
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
-					cancelOnSignal(cancel)
+					sys.CancelOnSignal(cancel)
 
-					params := lib.Params{
+					gparams := params.Params{
 						LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 					}
 
-					logger, err := Logger(params.LogLevel)
+					logger, err := params.Logger(gparams.LogLevel)
 					if err != nil {
 						return err
 					}
 					defer func() { _ = logger.Sync() }()
 
-					c := cliContext{ctx: clictx}
+					c := params.NewCliContext(clictx)
 					if c.SSHHost() == "" {
 						return errors.New("no host provided")
 					}
 
-					sshParams, err := getSSHParams(c)
+					sshParams, err := params.GetSSHParams(c)
 					if err != nil {
 						return err
 					}
 
-					_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+					_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 					if err != nil {
 						return err
 					}
@@ -410,7 +415,7 @@ func sftpCommand() cli.Command {
 						if err != nil {
 							return err
 						}
-						return lib.ShowFile(name, b, clictx.GlobalBool("pager"))
+						return widgets.ShowFile(name, b, clictx.GlobalBool("pager"))
 					}
 					return lib.SFTPGetAuth(ctx, []string{target}, sshParams, methods, cb, logger)
 				},
@@ -445,26 +450,26 @@ func sftpCommand() cli.Command {
 						}
 					}()
 
-					params := lib.Params{
+					gparams := params.Params{
 						LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 					}
 
-					logger, err := Logger(params.LogLevel)
+					logger, err := params.Logger(gparams.LogLevel)
 					if err != nil {
 						return err
 					}
 					defer func() { _ = logger.Sync() }()
 
-					c := cliContext{ctx: clictx}
+					c := params.NewCliContext(clictx)
 					if c.SSHHost() == "" {
 						return errors.New("no host provided")
 					}
-					sshParams, err := getSSHParams(c)
+					sshParams, err := params.GetSSHParams(c)
 					if err != nil {
 						return err
 					}
 
-					_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+					_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 					if err != nil {
 						return err
 					}

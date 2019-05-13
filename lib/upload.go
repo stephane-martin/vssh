@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 	"io"
 	"io/ioutil"
 	"os"
@@ -87,7 +89,7 @@ func MakeSource(filename string) (Source, error) {
 	return nil, fmt.Errorf("is not a regular file: %s", filename)
 }
 
-func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
+func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, gparams params.SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
 	if len(sources) == 0 {
 		return nil
 	}
@@ -97,13 +99,13 @@ func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, param
 	}
 
 	cfg := gssh.Config{
-		User:      params.LoginName,
-		Host:      params.Host,
-		Port:      params.Port,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
 		Auth:      auth,
-		HTTPProxy: params.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return err
 	}
@@ -243,7 +245,7 @@ func SFTPPutAuth(ctx context.Context, sources []Source, remotePath string, param
 
 }
 
-func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
+func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, gparams params.SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger) error {
 	if len(sources) == 0 {
 		return nil
 	}
@@ -252,12 +254,12 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params
 		remotePath = "."
 	}
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
+		User: gparams.LoginName,
+		Host: gparams.Host,
+		Port: gparams.Port,
 		Auth: auth,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return err
 	}
@@ -274,7 +276,7 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params
 	if remotePath == "-" {
 		p = "-- -"
 	} else {
-		p = EscapeString(remotePath)
+		p = sys.EscapeString(remotePath)
 	}
 	command := fmt.Sprintf("scp %s %s", opts, p)
 	l.Debugw("remote command", "cmd", command)
@@ -299,7 +301,7 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, params
 	return client.Wait()
 }
 
-func ScpPut(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func ScpPut(ctx context.Context, sources []Source, remotePath string, gparams params.SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // close the SSH session
@@ -311,10 +313,10 @@ func ScpPut(ctx context.Context, sources []Source, remotePath string, params SSH
 	if err != nil {
 		return err
 	}
-	return ScpPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{a}, l)
+	return ScpPutAuth(lctx, sources, remotePath, gparams, []ssh.AuthMethod{a}, l)
 }
 
-func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
+func SFTPPut(ctx context.Context, sources []Source, remotePath string, gparams params.SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger) error {
 	lctx, cancel := context.WithCancel(ctx)
 	defer func() {
 		cancel() // close the SSH session
@@ -326,7 +328,7 @@ func SFTPPut(ctx context.Context, sources []Source, remotePath string, params SS
 	if err != nil {
 		return err
 	}
-	return SFTPPutAuth(lctx, sources, remotePath, params, []ssh.AuthMethod{a}, l)
+	return SFTPPutAuth(lctx, sources, remotePath, gparams, []ssh.AuthMethod{a}, l)
 }
 
 func sendDir(dirname string, stdin io.WriteCloser, stdout *bufio.Reader, l *zap.SugaredLogger) error {

@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
 	"io/ioutil"
 	"net"
 	"strings"
@@ -11,7 +15,6 @@ import (
 	"github.com/getlantern/golog"
 	"github.com/getlantern/hidden"
 	gssh "github.com/stephane-martin/golang-ssh"
-	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
 )
@@ -44,29 +47,29 @@ func socksAction(clictx *cli.Context) (e error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cancelOnSignal(cancel)
+	sys.CancelOnSignal(cancel)
 
-	params := lib.Params{
+	gparams := params.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 	}
 
-	logger, err := Logger(params.LogLevel)
+	logger, err := params.Logger(gparams.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
 
-	var c CLIContext = cliContext{ctx: clictx}
+	c := params.NewCliContext(clictx)
 	if c.SSHHost() == "" {
 		return errors.New("specify SSH host")
 	}
 
-	sshParams, err := getSSHParams(c)
+	sshParams, err := params.GetSSHParams(c)
 	if err != nil {
 		return err
 	}
 
-	_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
 	}
@@ -104,7 +107,7 @@ func socksAction(clictx *cli.Context) (e error) {
 
 	dnsServer := clictx.String("dnsaddr")
 	if dnsServer == "" {
-		dnsServers, err := lib.FindDNSServers(client)
+		dnsServers, err := remoteops.FindDNSServers(client)
 		if err != nil {
 			return err
 		}
@@ -114,7 +117,7 @@ func socksAction(clictx *cli.Context) (e error) {
 		dnsServer = dnsServers[0] + ":53"
 		logger.Debugw("discovered DNS server in /etc/resolv.conf", "addr", dnsServer)
 	}
-	resolver := lib.NewResolver(client, dnsServer, logger)
+	resolver := remoteops.NewResolver(client, dnsServer, logger)
 
 	socksConfig := socks5.Config{
 		Resolver: resolver,

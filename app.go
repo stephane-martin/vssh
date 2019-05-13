@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/widgets"
 	"io/ioutil"
 
 	"github.com/gabriel-vasile/mimetype"
-	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 )
 
@@ -68,7 +68,7 @@ func App() *cli.App {
 				if err != nil {
 					return err
 				}
-				return lib.ShowFile(args[0], content, c.GlobalBool("pager"))
+				return widgets.ShowFile(args[0], content, c.GlobalBool("pager"))
 			},
 		},
 	}

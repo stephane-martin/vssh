@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
 	"os"
 	"strings"
 
@@ -66,7 +70,7 @@ func filterOutEmptyStrings(a []string) []string {
 	return b
 }
 
-type putFunc func(context.Context, []lib.Source, string, lib.SSHParams, []ssh.AuthMethod, *zap.SugaredLogger) error
+type putFunc func(context.Context, []lib.Source, string, params.SSHParams, []ssh.AuthMethod, *zap.SugaredLogger) error
 
 type entry struct {
 	path  string
@@ -84,13 +88,13 @@ func wrapPut(f putFunc) cli.ActionFunc {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		cancelOnSignal(cancel)
+		sys.CancelOnSignal(cancel)
 
-		params := lib.Params{
+		gparams := params.Params{
 			LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 		}
 
-		logger, err := Logger(params.LogLevel)
+		logger, err := params.Logger(gparams.LogLevel)
 		if err != nil {
 			return err
 		}
@@ -100,13 +104,13 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			return errors.New("no host provided")
 		}
 
-		c := cliContext{ctx: clictx}
-		sshParams, err := getSSHParams(c)
+		c := params.NewCliContext(clictx)
+		sshParams, err := params.GetSSHParams(c)
 		if err != nil {
 			return err
 		}
 
-		_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+		_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 		if err != nil {
 			return err
 		}
@@ -130,7 +134,7 @@ func wrapPut(f putFunc) cli.ActionFunc {
 			if err != nil {
 				return err
 			}
-			sourcesNames, err = lib.FuzzyLocal(wd, logger)
+			sourcesNames, err = remoteops.FuzzyLocal(wd, logger)
 			if err != nil {
 				return err
 			}

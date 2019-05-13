@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -14,9 +17,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func writePubkey(dir string, pub *PublicKey) (string, error) {
+func writePubkey(dir string, pub *crypto.PublicKey) (string, error) {
 	pubkeyPath := filepath.Join(dir, "key.pub")
-	serialized, err := SerializePublicKey(pub)
+	serialized, err := crypto.SerializePublicKey(pub)
 	if err != nil {
 		return pubkeyPath, err
 	}
@@ -47,7 +50,7 @@ func writeKey(path string, key *memguard.LockedBuffer) error {
 	return err
 }
 
-func NativeConnect(ctx context.Context, sshParams SSHParams, terminal, verbose bool, priv *memguard.LockedBuffer, pub *PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
+func NativeConnect(ctx context.Context, sshParams params.SSHParams, terminal, verbose bool, priv *memguard.LockedBuffer, pub *crypto.PublicKey, cert *memguard.LockedBuffer, env map[string]string, l *zap.SugaredLogger) error {
 	dir, err := ioutil.TempDir("", "vssh")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary directory: %s", err)
@@ -101,7 +104,7 @@ func NativeConnect(ctx context.Context, sshParams SSHParams, terminal, verbose b
 	if len(env) != 0 {
 		var pre []string
 		pre = append(pre, "env")
-		pre = append(pre, EscapeEnv(env)...)
+		pre = append(pre, sys.EscapeEnv(env)...)
 		if len(sshParams.Commands) == 0 {
 			pre = append([]string{"-t"}, pre...)
 			pre = append(pre, "bash")

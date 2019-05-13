@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 	"io"
 	"net"
 	"strings"
 
 	gssh "github.com/stephane-martin/golang-ssh"
-	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
@@ -71,29 +73,29 @@ func localTunnelAction(clictx *cli.Context) (e error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cancelOnSignal(cancel)
+	sys.CancelOnSignal(cancel)
 
-	params := lib.Params{
+	gparams := params.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 	}
 
-	logger, err := Logger(params.LogLevel)
+	logger, err := params.Logger(gparams.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
 
-	var c CLIContext = cliContext{ctx: clictx}
+	c := params.NewCliContext(clictx)
 	if c.SSHHost() == "" {
 		return errors.New("specify SSH host")
 	}
 
-	sshParams, err := getSSHParams(c)
+	sshParams, err := params.GetSSHParams(c)
 	if err != nil {
 		return err
 	}
 
-	_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
 	}
@@ -205,29 +207,29 @@ func remoteTunnelAction(clictx *cli.Context) (e error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cancelOnSignal(cancel)
+	sys.CancelOnSignal(cancel)
 
-	params := lib.Params{
+	gparams := params.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 	}
 
-	logger, err := Logger(params.LogLevel)
+	logger, err := params.Logger(gparams.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
 
-	var c CLIContext = cliContext{ctx: clictx}
+	c := params.NewCliContext(clictx)
 	if c.SSHHost() == "" {
 		return errors.New("specify SSH host")
 	}
 
-	sshParams, err := getSSHParams(c)
+	sshParams, err := params.GetSSHParams(c)
 	if err != nil {
 		return err
 	}
 
-	_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
 	"io"
 	"io/ioutil"
 	"os"
@@ -24,15 +27,15 @@ import (
 // Callback is a function type that is used by ScpGet to return the remote SSH directories and files.
 type Callback func(isDir, endOfDir bool, name string, perms os.FileMode, mtime, atime time.Time, content io.Reader) error
 
-func SFTPClient(params SSHParams, methods []ssh.AuthMethod, l *zap.SugaredLogger) (*sftp.Client, error) {
+func SFTPClient(gparams params.SSHParams, methods []ssh.AuthMethod, l *zap.SugaredLogger) (*sftp.Client, error) {
 	cfg := gssh.Config{
-		User:      params.LoginName,
-		Host:      params.Host,
-		Port:      params.Port,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
 		Auth:      methods,
-		HTTPProxy: params.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return nil, err
 	}
@@ -44,18 +47,18 @@ func SFTPClient(params SSHParams, methods []ssh.AuthMethod, l *zap.SugaredLogger
 	return client, err
 }
 
-func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger, cb ListCallback) error {
+func SFTPListAuth(ctx context.Context, gparams params.SSHParams, auth []ssh.AuthMethod, l *zap.SugaredLogger, cb remoteops.ListCallback) error {
 	if len(auth) == 0 {
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User:      params.LoginName,
-		Host:      params.Host,
-		Port:      params.Port,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
 		Auth:      auth,
-		HTTPProxy: params.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return err
 	}
@@ -79,10 +82,10 @@ func SFTPListAuth(ctx context.Context, params SSHParams, auth []ssh.AuthMethod, 
 	if err != nil {
 		return err
 	}
-	return WalkRemote(client, wd, cb, l)
+	return remoteops.WalkRemote(client, wd, cb, l)
 }
 
-func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
+func SFTPGetAuth(ctx context.Context, srcs []string, gparams params.SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -90,13 +93,13 @@ func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ss
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User:      params.LoginName,
-		Host:      params.Host,
-		Port:      params.Port,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
 		Auth:      auth,
-		HTTPProxy: params.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return err
 	}
@@ -178,7 +181,7 @@ func SFTPGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ss
 	return nil
 }
 
-func ScpGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
+func ScpGetAuth(ctx context.Context, srcs []string, gparams params.SSHParams, auth []ssh.AuthMethod, cb Callback, l *zap.SugaredLogger) error {
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -186,12 +189,12 @@ func ScpGetAuth(ctx context.Context, srcs []string, params SSHParams, auth []ssh
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User: params.LoginName,
-		Host: params.Host,
-		Port: params.Port,
+		User: gparams.LoginName,
+		Host: gparams.Host,
+		Port: gparams.Port,
 		Auth: auth,
 	}
-	hkcb, err := gssh.MakeHostKeyCallback(params.Insecure, l)
+	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
 		return err
 	}
@@ -222,28 +225,28 @@ func makeAuthCertificate(privkey, cert *memguard.LockedBuffer) (ssh.AuthMethod, 
 	return ssh.PublicKeys(signer), nil
 }
 
-func ScpGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+func ScpGet(ctx context.Context, srcs []string, gparams params.SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
 	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	return ScpGetAuth(ctx, srcs, params, []ssh.AuthMethod{a}, cb, l)
+	return ScpGetAuth(ctx, srcs, gparams, []ssh.AuthMethod{a}, cb, l)
 }
 
-func SFTPGet(ctx context.Context, srcs []string, params SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
+func SFTPGet(ctx context.Context, srcs []string, gparams params.SSHParams, privkey, cert *memguard.LockedBuffer, cb Callback, l *zap.SugaredLogger) error {
 	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	return SFTPGetAuth(ctx, srcs, params, []ssh.AuthMethod{a}, cb, l)
+	return SFTPGetAuth(ctx, srcs, gparams, []ssh.AuthMethod{a}, cb, l)
 }
 
-func SFTPList(ctx context.Context, params SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger, cb ListCallback) error {
+func SFTPList(ctx context.Context, gparams params.SSHParams, privkey, cert *memguard.LockedBuffer, l *zap.SugaredLogger, cb remoteops.ListCallback) error {
 	a, err := makeAuthCertificate(privkey, cert)
 	if err != nil {
 		return err
 	}
-	return SFTPListAuth(ctx, params, []ssh.AuthMethod{a}, l, cb)
+	return SFTPListAuth(ctx, gparams, []ssh.AuthMethod{a}, l, cb)
 }
 
 func receive(ctx context.Context, cfg gssh.Config, src string, cb Callback, l *zap.SugaredLogger) error {
@@ -253,7 +256,7 @@ func receive(ctx context.Context, cfg gssh.Config, src string, cb Callback, l *z
 	if src == "-" {
 		p = "-- -"
 	} else {
-		p = EscapeString(src)
+		p = sys.EscapeString(src)
 	}
 	opts := "-q -f -r -p"
 	command := fmt.Sprintf("scp %s %s", opts, p)

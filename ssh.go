@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/vault"
+	"github.com/stephane-martin/vssh/widgets"
 	"os"
 	"os/signal"
 	"strings"
@@ -68,33 +72,33 @@ func sshAction(clictx *cli.Context) (e error) {
 		}
 	}()
 
-	params := lib.Params{
+	gparams := params.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 		Prefix:   clictx.Bool("prefix"),
 		Upcase:   clictx.Bool("upcase"),
 	}
 
-	logger, err := Logger(params.LogLevel)
+	logger, err := params.Logger(gparams.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
 
-	var c CLIContext = cliContext{ctx: clictx}
+	c := params.NewCliContext(clictx)
 	if c.SSHHost() == "" {
 		var err error
-		c, err = Form(c, true)
+		c, err = widgets.Form(c, true)
 		if err != nil {
 			return err
 		}
 	}
 
-	sshParams, err := getSSHParams(c)
+	sshParams, err := params.GetSSHParams(c)
 	if err != nil {
 		return err
 	}
 
-	client, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+	client, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
 	}
@@ -118,7 +122,7 @@ func sshAction(clictx *cli.Context) (e error) {
 		if client == nil {
 			return errors.New("can't read secrets from vault: no vault client")
 		}
-		res, err := lib.GetSecretsFromVault(ctx, client, secretPaths, params.Prefix, params.Upcase, logger)
+		res, err := vault.GetSecretsFromVault(ctx, client, secretPaths, gparams.Prefix, gparams.Upcase, logger)
 		if err != nil {
 			return err
 		}

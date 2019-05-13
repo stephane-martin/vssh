@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
+	"github.com/stephane-martin/vssh/widgets"
 	"strings"
 	"time"
 
 	"github.com/gdamore/tcell"
 	"github.com/rivo/tview"
 	gssh "github.com/stephane-martin/golang-ssh"
-	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sync/errgroup"
@@ -48,33 +52,33 @@ func topAction(clictx *cli.Context) (e error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cancelOnSignal(cancel)
+	sys.CancelOnSignal(cancel)
 
-	params := lib.Params{
+	gparams := params.Params{
 		LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 	}
 
-	logger, err := Logger(params.LogLevel)
+	logger, err := params.Logger(gparams.LogLevel)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = logger.Sync() }()
 
-	var c CLIContext = cliContext{ctx: clictx}
+	c := params.NewCliContext(clictx)
 	if c.SSHHost() == "" {
 		var err error
-		c, err = Form(c, true)
+		c, err = widgets.Form(c, true)
 		if err != nil {
 			return err
 		}
 	}
 
-	sshParams, err := getSSHParams(c)
+	sshParams, err := params.GetSSHParams(c)
 	if err != nil {
 		return err
 	}
 
-	_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 	if err != nil {
 		return err
 	}
@@ -108,12 +112,12 @@ func topAction(clictx *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-	defer client.Close()
-	stater, err := NewStater(client)
+	defer func() { _ = client.Close() }()
+	stater, err := remoteops.NewStater(client)
 	if err != nil {
 		return err
 	}
-	stats := make(chan Stats)
+	stats := make(chan remoteops.Stats)
 	g, lctx := errgroup.WithContext(ctx)
 
 	app := tview.NewApplication()

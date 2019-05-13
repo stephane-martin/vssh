@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
 	"io"
 	"os"
 	"os/signal"
@@ -66,7 +68,7 @@ func sftpGetCommand() cli.Command {
 	}
 }
 
-type getFunc func(context.Context, []string, lib.SSHParams, []ssh.AuthMethod, lib.Callback, *zap.SugaredLogger) error
+type getFunc func(context.Context, []string, params.SSHParams, []ssh.AuthMethod, lib.Callback, *zap.SugaredLogger) error
 
 func wrapGet(sftp bool) cli.ActionFunc {
 	return func(clictx *cli.Context) (e error) {
@@ -108,11 +110,11 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			return fmt.Errorf("no such file or directory: %s", dest)
 		}
 
-		params := lib.Params{
+		gparams := params.Params{
 			LogLevel: strings.ToLower(strings.TrimSpace(clictx.GlobalString("loglevel"))),
 		}
 
-		logger, err := Logger(params.LogLevel)
+		logger, err := params.Logger(gparams.LogLevel)
 		if err != nil {
 			return err
 		}
@@ -121,8 +123,8 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		if len(clictx.Args()) == 0 {
 			return errors.New("no host provided")
 		}
-		c := cliContext{ctx: clictx}
-		sshParams, err := getSSHParams(c)
+		c:= params.NewCliContext(clictx)
+		sshParams, err := params.GetSSHParams(c)
 		if err != nil {
 			return err
 		}
@@ -130,7 +132,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		if len(sources) == 0 {
 			var paths []entry
 
-			_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+			_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 			if err != nil {
 				return err
 			}
@@ -176,7 +178,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			}
 		}
 
-		_, credentials, err := getCredentials(ctx, c, sshParams.LoginName, logger)
+		_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
 		if err != nil {
 			return err
 		}
