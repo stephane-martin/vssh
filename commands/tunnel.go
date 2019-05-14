@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func tunnelCommand() cli.Command {
+func TunnelCommand() cli.Command {
 	return cli.Command{
 		Name:  "tunnel",
 		Usage: "make a local or remote SSH tunnel",

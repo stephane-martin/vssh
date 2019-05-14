@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -21,7 +21,7 @@ const (
 	DEBUG = "debug"
 )
 
-func sshCommand() cli.Command {
+func SSHCommand() cli.Command {
 	return cli.Command{
 		Name:   "ssh",
 		Usage:  "connect to remote server with SSH using Vault for authentication",

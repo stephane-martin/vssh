@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func topCommand() cli.Command {
+func TopCommand() cli.Command {
 	return cli.Command{
 		Name:   "top",
 		Action: topAction,

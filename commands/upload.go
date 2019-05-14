@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -18,10 +18,7 @@ import (
 	"github.com/urfave/cli"
 )
 
-const folderIcon = "\xF0\x9F\x97\x80 "
-const fileIcon = "\xF0\x9F\x97\x88 "
-
-func scpPutCommand() cli.Command {
+func SCPPutCommand() cli.Command {
 	return cli.Command{
 		Name:  "put",
 		Usage: "upload files with scp using Vault for authentication",
@@ -40,7 +37,7 @@ func scpPutCommand() cli.Command {
 	}
 }
 
-func sftpPutCommand() cli.Command {
+func SFTPPutCommand() cli.Command {
 	return cli.Command{
 		Name:  "put",
 		Usage: "upload files with SFTP using Vault for authentication",

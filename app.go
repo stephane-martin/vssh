@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"github.com/stephane-martin/vssh/commands"
 	"github.com/stephane-martin/vssh/widgets"
 	"io/ioutil"
 
@@ -17,16 +18,16 @@ func App() *cli.App {
 	app.Usage = "SSH/SCP using certificates signed by Vault"
 	app.Version = version
 	app.Commands = []cli.Command{
-		sshCommand(),
-		scpCommand(),
-		sftpCommand(),
-		topCommand(),
-		browseCommand(),
-		tunnelCommand(),
-		resolveCommand(),
-		socksCommand(),
-		httpProxyCommand(),
-		cli.Command{
+		commands.SSHCommand(),
+		commands.SCPCommand(),
+		commands.SFTPCommand(),
+		commands.TopCommand(),
+		commands.BrowseCommand(),
+		commands.TunnelCommand(),
+		commands.ResolveCommand(),
+		commands.SocksCommand(),
+		commands.HTTPProxyCommand(),
+		{
 			Name:  "version",
 			Usage: "print vssh version",
 			Action: func(c *cli.Context) error {
@@ -34,7 +35,7 @@ func App() *cli.App {
 				return nil
 			},
 		},
-		cli.Command{
+		{
 			Name:  "mimetype",
 			Usage: "detect mimetype of file argument",
 			Action: func(c *cli.Context) error {
@@ -50,7 +51,7 @@ func App() *cli.App {
 				return nil
 			},
 		},
-		cli.Command{
+		{
 			Name:  "less",
 			Usage: "show local file content",
 			Action: func(c *cli.Context) (e error) {

@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/stephane-martin/vssh/sys"
 	"os"
+
+	"github.com/stephane-martin/vssh/sys"
 
 	"github.com/awnumar/memguard"
 	"github.com/gdamore/tcell"
@@ -30,6 +31,7 @@ func main() {
 }
 
 func init() {
+	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDarkSlateGrey
 	tview.Styles.ContrastBackgroundColor = tcell.ColorSlateGrey
 	tview.Styles.PrimaryTextColor = tcell.ColorWhite
 }

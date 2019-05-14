@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -30,7 +30,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func browseCommand() cli.Command {
+func BrowseCommand() cli.Command {
 	return cli.Command{
 		Name:  "browse",
 		Usage: "view a SFTP server through HTTP",
@@ -149,7 +149,7 @@ func browseCommand() cli.Command {
 	}
 }
 
-func sftpCommand() cli.Command {
+func SFTPCommand() cli.Command {
 	return cli.Command{
 		Name:  "sftp",
 		Usage: "download/upload files with sftp protocol using Vault for authentication",
@@ -342,8 +342,8 @@ func sftpCommand() cli.Command {
 			}
 		},
 		Subcommands: []cli.Command{
-			sftpPutCommand(),
-			sftpGetCommand(),
+			SFTPPutCommand(),
+			SFTPGetCommand(),
 			{
 				Name: "less",
 				Flags: []cli.Flag{

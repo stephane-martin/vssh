@@ -17,6 +17,9 @@ func (f Unixfile) PaddedName(l int) string {
 }
 
 func (f Unixfile) PaddedSize(l int) string {
+	if !f.Mode().IsRegular() {
+		return fmt.Sprintf("%-"+fmt.Sprintf("%d", l)+"s", "-")
+	}
 	return fmt.Sprintf("%-"+fmt.Sprintf("%d", l)+"d", f.Size())
 }
 
@@ -27,4 +30,3 @@ func (f Unixfile) PaddedUser(l int) string {
 func (f Unixfile) PaddedGroup(l int) string {
 	return fmt.Sprintf("%-"+fmt.Sprintf("%d", l)+"s", f.Group)
 }
-

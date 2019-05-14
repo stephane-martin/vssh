@@ -3,12 +3,13 @@ package widgets
 import (
 	"errors"
 	"fmt"
-	"github.com/stephane-martin/vssh/sys"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/stephane-martin/vssh/sys"
 
 	"github.com/ahmetb/go-linq"
 	"github.com/gdamore/tcell"
@@ -239,28 +240,31 @@ func (table *tableOfFiles) fill() {
 	table.table.SetCell(row, 4, tview.NewTableCell("Perms").SetTextColor(tcell.ColorDarkGray).SetStyle(bold).SetExpansion(1))
 	table.table.SetCell(row, 5, tview.NewTableCell("Mod").SetTextColor(tcell.ColorDarkGray).SetStyle(bold).SetExpansion(1))
 	row++
-	table.table.SetCell(row, 0, tview.NewTableCell("..").SetTextColor(tcell.ColorBlue))
+	table.table.SetCell(row, 0, tview.NewTableCell("..").SetTextColor(tcell.ColorLightBlue))
 	row++
 	for _, d := range table.files.Dirs {
 		c := tview.NewTableCell(d.PaddedName(maxNameLength))
 		if strings.HasPrefix(d.Name(), ".") {
-			c.SetTextColor(tcell.ColorBlue)
+			c.SetTextColor(tcell.ColorLightBlue)
 		} else {
-			c.SetStyle(bold).SetTextColor(tcell.ColorBlue)
+			c.SetStyle(bold).SetTextColor(tcell.ColorLightBlue)
 		}
 		table.table.SetCell(row, 0, c)
-		table.table.SetCell(row, 2, tview.NewTableCell(d.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 3, tview.NewTableCell(d.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", d.Mode().Perm())).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 5, tview.NewTableCell(d.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorDarkGray))
+		table.table.SetCell(row, 1, tview.NewTableCell(d.PaddedSize(maxSizeLength)))
+		table.table.SetCell(row, 2, tview.NewTableCell(d.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 3, tview.NewTableCell(d.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", d.Mode().Perm())).SetTextColor(tcell.ColorLightCoral))
+		table.table.SetCell(row, 5, tview.NewTableCell(d.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorLightSeaGreen))
 		row++
 	}
 	for _, irr := range table.files.Irregulars {
-		c := tview.NewTableCell(irr.PaddedName(maxNameLength)).SetTextColor(tcell.ColorRed)
+		c := tview.NewTableCell(irr.PaddedName(maxNameLength)).SetTextColor(tcell.ColorViolet)
 		table.table.SetCell(row, 0, c)
-		table.table.SetCell(row, 2, tview.NewTableCell(irr.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 3, tview.NewTableCell(irr.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", irr.Mode().Perm())).SetTextColor(tcell.ColorYellow))
+		table.table.SetCell(row, 1, tview.NewTableCell(irr.PaddedSize(maxSizeLength)))
+		table.table.SetCell(row, 2, tview.NewTableCell(irr.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 3, tview.NewTableCell(irr.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", irr.Mode().Perm())).SetTextColor(tcell.ColorLightCoral))
+		table.table.SetCell(row, 5, tview.NewTableCell(irr.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorLightSeaGreen))
 		row++
 	}
 	for _, reg := range table.files.Regulars {
@@ -276,10 +280,10 @@ func (table *tableOfFiles) fill() {
 		}
 		table.table.SetCell(row, 0, c)
 		table.table.SetCell(row, 1, tview.NewTableCell(reg.PaddedSize(maxSizeLength)))
-		table.table.SetCell(row, 2, tview.NewTableCell(reg.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 3, tview.NewTableCell(reg.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", reg.Mode().Perm())).SetTextColor(tcell.ColorYellow))
-		table.table.SetCell(row, 5, tview.NewTableCell(reg.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorDarkGray))
+		table.table.SetCell(row, 2, tview.NewTableCell(reg.PaddedUser(maxUserLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 3, tview.NewTableCell(reg.PaddedGroup(maxGroupLength)).SetTextColor(tcell.ColorKhaki))
+		table.table.SetCell(row, 4, tview.NewTableCell(fmt.Sprintf("%-12s", reg.Mode().Perm())).SetTextColor(tcell.ColorLightCoral))
+		table.table.SetCell(row, 5, tview.NewTableCell(reg.ModTime().Format(time.RFC822)).SetTextColor(tcell.ColorLightSeaGreen))
 		row++
 	}
 
@@ -322,8 +326,6 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	}
 	return table.err
 }
-
-
 
 type Unixfiles struct {
 	AllFiles   []sys.Unixfile

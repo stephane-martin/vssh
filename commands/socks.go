@@ -1,4 +1,4 @@
-package main
+package commands
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-func socksCommand() cli.Command {
+func SocksCommand() cli.Command {
 	return cli.Command{
 		Name:   "socks",
 		Action: socksAction,

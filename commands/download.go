@@ -1,11 +1,9 @@
-package main
+package commands
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stephane-martin/vssh/crypto"
-	"github.com/stephane-martin/vssh/params"
 	"io"
 	"os"
 	"os/signal"
@@ -14,15 +12,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+
 	"github.com/ktr0731/go-fuzzyfinder"
 	"golang.org/x/crypto/ssh"
 
+	icon "github.com/stephane-martin/vssh/c"
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
 )
 
-func scpGetCommand() cli.Command {
+func SCPGetCommand() cli.Command {
 	return cli.Command{
 		Name:  "get",
 		Usage: "download files with scp using Vault for authentication",
@@ -45,7 +47,7 @@ func scpGetCommand() cli.Command {
 	}
 }
 
-func sftpGetCommand() cli.Command {
+func SFTPGetCommand() cli.Command {
 	return cli.Command{
 		Name:  "get",
 		Usage: "download files with scp using Vault for authentication",
@@ -123,7 +125,7 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		if len(clictx.Args()) == 0 {
 			return errors.New("no host provided")
 		}
-		c:= params.NewCliContext(clictx)
+		c := params.NewCliContext(clictx)
 		sshParams, err := params.GetSSHParams(c)
 		if err != nil {
 			return err
@@ -166,9 +168,9 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			}
 			idx, _ := fuzzyfinder.FindMulti(paths, func(i int) string {
 				if paths[i].isdir {
-					return folderIcon + paths[i].rel
+					return icon.FolderIcon + paths[i].rel
 				}
-				return fileIcon + paths[i].rel
+				return icon.FileIcon + paths[i].rel
 			})
 			for _, i := range idx {
 				sources = append(sources, paths[i].path)

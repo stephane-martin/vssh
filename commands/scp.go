@@ -1,14 +1,14 @@
-package main
+package commands
 
 import "github.com/urfave/cli"
 
-func scpCommand() cli.Command {
+func SCPCommand() cli.Command {
 	return cli.Command{
 		Name:  "scp",
 		Usage: "download/upload files with scp protocol using Vault for authentication",
 		Subcommands: []cli.Command{
-			scpPutCommand(),
-			scpGetCommand(),
+			SCPPutCommand(),
+			SCPGetCommand(),
 		},
 	}
 }
