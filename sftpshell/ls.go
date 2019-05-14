@@ -77,7 +77,7 @@ func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Cl
 		if d != "." {
 			fmt.Fprintf(out, "%s:\n", d)
 		}
-		stats := make([]sys.Unixfile, 0, f.Size())
+		stats := make([]sys.UFile, 0, f.Size())
 		names := f.List()
 		sort.Strings(names)
 		for _, fname := range names {
@@ -86,7 +86,7 @@ func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Cl
 				if err != nil {
 					continue
 				}
-				stats = append(stats, sys.Unixfile{FileInfo: s, Path: fname})
+				stats = append(stats, sys.UFile{FileInfo: s, Path: fname})
 			}
 		}
 		format.ListOfFiles(width, flags.Has("l"), stats, out)

@@ -10,11 +10,11 @@ import (
 	"strings"
 )
 
-func ListOfFiles(width int, long bool, files []sys.Unixfile, buf io.Writer) {
+func ListOfFiles(width int, long bool, files []sys.UFile, buf io.Writer) {
 	// TODO: long should return more information
 	maxlen := int(1)
 	if len(files) != 0 {
-		maxlen += linq.From(files).SelectT(func(info sys.Unixfile) int {
+		maxlen += linq.From(files).SelectT(func(info sys.UFile) int {
 			if info.IsDir() {
 				return len(info.Path) + 1
 			}

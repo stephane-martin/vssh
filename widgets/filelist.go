@@ -22,7 +22,7 @@ type tableOfFiles struct {
 	app      *tview.Application
 	pages    *tview.Pages
 	table    *tview.Table
-	files    *Unixfiles
+	files    *UFiles
 	err      error
 	errlock  sync.Mutex
 	callback SelectedCallback
@@ -299,7 +299,7 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	if err != nil {
 		return err
 	}
-	table.files = new(Unixfiles)
+	table.files = new(UFiles)
 	table.files.Init(files, remote)
 
 	table.app = tview.NewApplication()
@@ -327,65 +327,65 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	return table.err
 }
 
-type Unixfiles struct {
-	AllFiles   []sys.Unixfile
-	Dirs       []sys.Unixfile
-	Regulars   []sys.Unixfile
-	Irregulars []sys.Unixfile
+type UFiles struct {
+	AllFiles   []sys.UFile
+	Dirs       []sys.UFile
+	Regulars   []sys.UFile
+	Irregulars []sys.UFile
 }
 
-func (files *Unixfiles) maxNameLength() int {
-	if len(files.AllFiles) == 0 {
+func (all *UFiles) maxNameLength() int {
+	if len(all.AllFiles) == 0 {
 		return 0
 	}
-	return linq.From(files.AllFiles).SelectT(func(file sys.Unixfile) int { return len(file.Name()) }).Max().(int)
+	return linq.From(all.AllFiles).SelectT(func(file sys.UFile) int { return len(file.Name()) }).Max().(int)
 }
 
-func (files *Unixfiles) maxSizeLength() int {
-	if len(files.AllFiles) == 0 {
-		return 0
-	}
-
-	return linq.From(files.AllFiles).SelectT(func(file sys.Unixfile) int { return len(fmt.Sprintf("%d", file.Size())) }).Max().(int)
-}
-
-func (files *Unixfiles) maxUserLength() int {
-	if len(files.AllFiles) == 0 {
+func (all *UFiles) maxSizeLength() int {
+	if len(all.AllFiles) == 0 {
 		return 0
 	}
 
-	return linq.From(files.AllFiles).SelectT(func(file sys.Unixfile) int { return len(file.User) }).Max().(int)
+	return linq.From(all.AllFiles).SelectT(func(file sys.UFile) int { return len(file.FSize()) }).Max().(int)
 }
 
-func (files *Unixfiles) maxGroupLength() int {
-	if len(files.AllFiles) == 0 {
+func (all *UFiles) maxUserLength() int {
+	if len(all.AllFiles) == 0 {
 		return 0
 	}
 
-	return linq.From(files.AllFiles).SelectT(func(file sys.Unixfile) int { return len(file.Group) }).Max().(int)
+	return linq.From(all.AllFiles).SelectT(func(file sys.UFile) int { return len(file.User) }).Max().(int)
 }
 
-func (files *Unixfiles) getSelectedFile(position int) *SelectedFile {
-	if position == 0 || (position >= (len(files.AllFiles) + 2)) {
+func (all *UFiles) maxGroupLength() int {
+	if len(all.AllFiles) == 0 {
+		return 0
+	}
+
+	return linq.From(all.AllFiles).SelectT(func(file sys.UFile) int { return len(file.Group) }).Max().(int)
+}
+
+func (all *UFiles) getSelectedFile(position int) *SelectedFile {
+	if position == 0 || (position >= (len(all.AllFiles) + 2)) {
 		return nil
 	}
 	if position == 1 {
 		return &SelectedFile{Name: "..", Position: position, IsDir: true}
 	}
-	f := files.AllFiles[position-2]
+	f := all.AllFiles[position-2]
 	if f.IsDir() || f.Mode().IsRegular() {
 		return &SelectedFile{Name: f.Name(), Size: f.Size(), Mode: f.Mode(), Position: position, IsDir: f.IsDir()}
 	}
 	return nil
 }
 
-func (all *Unixfiles) Init(files []os.FileInfo, remote bool) *Unixfiles {
-	all.Dirs = make([]sys.Unixfile, 0, len(files))
-	all.Regulars = make([]sys.Unixfile, 0, len(files))
-	all.Irregulars = make([]sys.Unixfile, 0, len(files))
+func (all *UFiles) Init(files []os.FileInfo, remote bool) *UFiles {
+	all.Dirs = make([]sys.UFile, 0, len(files))
+	all.Regulars = make([]sys.UFile, 0, len(files))
+	all.Irregulars = make([]sys.UFile, 0, len(files))
 	for _, f := range files {
 		u, g := sys.UserGroup(f, remote)
-		uf := sys.Unixfile{FileInfo: f, User: u, Group: g}
+		uf := sys.UFile{FileInfo: f, User: u, Group: g}
 		if f.IsDir() {
 			all.Dirs = append(all.Dirs, uf)
 		} else if f.Mode().IsRegular() {
@@ -398,7 +398,7 @@ func (all *Unixfiles) Init(files []os.FileInfo, remote bool) *Unixfiles {
 	sort.Slice(all.Regulars, func(i, j int) bool { return all.Regulars[i].Name() < all.Regulars[j].Name() })
 	sort.Slice(all.Irregulars, func(i, j int) bool { return all.Irregulars[i].Name() < all.Irregulars[j].Name() })
 
-	all.AllFiles = make([]sys.Unixfile, 0, len(all.Dirs)+len(all.Regulars)+len(all.Irregulars))
+	all.AllFiles = make([]sys.UFile, 0, len(all.Dirs)+len(all.Regulars)+len(all.Irregulars))
 	all.AllFiles = append(all.AllFiles, all.Dirs...)
 	all.AllFiles = append(all.AllFiles, all.Irregulars...)
 	all.AllFiles = append(all.AllFiles, all.Regulars...)

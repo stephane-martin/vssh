@@ -214,9 +214,9 @@ func serveFile(w http.ResponseWriter, r *http.Request, fs *bFS, name string, red
 
 	// redirect if the directory name doesn't end in a slash
 	if d.IsDir() {
-		url := r.URL.Path
-		if url[len(url)-1] != '/' {
-			localRedirect(w, r, path.Base(url)+"/")
+		u := r.URL.Path
+		if u[len(u)-1] != '/' {
+			localRedirect(w, r, path.Base(u)+"/")
 			return
 		}
 	}
