@@ -9,7 +9,6 @@ import (
 
 	"github.com/stephane-martin/vssh/params"
 
-	"github.com/gdamore/tcell"
 	"github.com/mattn/go-shellwords"
 	"github.com/rivo/tview"
 )
@@ -36,8 +35,8 @@ func Form(c params.CLIContext, sshOptions bool) (params.CLIContext, error) {
 	form.SetButtonsAlign(tview.AlignCenter)
 	form.SetBorder(true)
 	form.SetTitle(" Enter connection parameters ")
-	form.SetButtonBackgroundColor(tcell.ColorDarkBlue)
-	form.SetButtonTextColor(tcell.ColorWhite)
+	form.SetButtonBackgroundColor(tview.Styles.MoreContrastBackgroundColor)
+	form.SetButtonTextColor(tview.Styles.PrimaryTextColor)
 	form.SetCancelFunc(func() { app.Stop() })
 
 	addInputField := func(label, value string, fieldWidth int, accept func(textToCheck string, lastChar rune) bool) *tview.InputField {

@@ -27,8 +27,15 @@ func TopCommand() cli.Command {
 	}
 }
 
+func flex() *tview.Flex {
+	f := tview.NewFlex()
+	f.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	return f
+}
+
 func textView() *tview.TextView {
 	t := tview.NewTextView()
+	t.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	t.SetScrollable(false)
 	t.SetBorder(false)
 	t.SetDynamicColors(true)
@@ -115,7 +122,8 @@ func topAction(clictx *cli.Context) (e error) {
 	v := tview.NewFlex()
 	v.SetDirection(tview.FlexRow)
 	v.SetBorder(true)
-	v.SetTitleColor(tcell.ColorCadetBlue)
+	v.SetTitleColor(tview.Styles.TitleColor)
+	v.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	v.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEscape || event.Rune() == 'q' {
 			app.Stop()
@@ -124,25 +132,25 @@ func topAction(clictx *cli.Context) (e error) {
 		return event
 	})
 
-	h1 := tview.NewFlex()
+	h1 := flex()
 	h1.SetBorderPadding(1, 0, 0, 0)
 	header := textView().SetTextAlign(tview.AlignCenter)
 	h1.AddItem(header, 0, 1, false)
 
-	h4 := tview.NewFlex()
+	h4 := flex()
 	h4.SetBorderPadding(1, 0, 0, 0)
 
 	filesystems := textView()
 	filesystems.SetBorder(true)
 	filesystems.SetBorderPadding(1, 1, 1, 1)
 	filesystems.SetTitle(" Filesystems (unit: MB)")
-	filesystems.SetTitleColor(tcell.ColorLightCoral)
+	filesystems.SetTitleColor(tview.Styles.ContrastSecondaryTextColor)
 	h4.AddItem(filesystems, 0, 1, false)
 
 	interfaces := textView()
 	interfaces.SetBorder(true)
 	interfaces.SetBorderPadding(1, 1, 1, 1)
-	interfaces.SetTitleColor(tcell.ColorLightCoral)
+	interfaces.SetTitleColor(tview.Styles.ContrastSecondaryTextColor)
 	interfaces.SetTitle(" Interfaces ")
 	h4.AddItem(interfaces, 0, 1, false)
 
@@ -239,7 +247,7 @@ func topAction(clictx *cli.Context) (e error) {
 						}
 						buf.WriteString(
 							fmt.Sprintf(
-								"[blue]"+mpFmt+"[-] [orange]"+usedFmt+"[-] / [navajowhite]"+totalFmt+"[-] (%s)\n",
+								"[lightblue]"+mpFmt+"[-] [orange]"+usedFmt+"[-] / [navajowhite]"+totalFmt+"[-] (%s)\n",
 								fs.MountPoint,
 								fs.Used/(1024*1024),
 								fs.Total()/(1024*1024),
@@ -257,7 +265,7 @@ func topAction(clictx *cli.Context) (e error) {
 						for i := range addresses {
 							addresses[i] = fmt.Sprintf("[navajowhite]%s[-]", addresses[i])
 						}
-						buf.WriteString(fmt.Sprintf("[blue]%s[-]\n", iface.Name))
+						buf.WriteString(fmt.Sprintf("[lightblue]%s[-]\n", iface.Name))
 						buf.WriteString("├─ IP: ")
 						buf.WriteString(strings.Join(addresses, ", "))
 						buf.WriteString("\n└─ ")

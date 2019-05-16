@@ -20,6 +20,7 @@ import (
 )
 
 func HTTPProxyCommand() cli.Command {
+	// TODO: support DNS on UDP
 	return cli.Command{
 		Name:   "httpproxy",
 		Action: httpProxyAction,

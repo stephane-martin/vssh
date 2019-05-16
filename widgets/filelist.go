@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type tableOfFiles struct {
 	callback SelectedCallback
 	readFile func(string) ([]byte, error)
 	remote   bool
+	wd       string
 }
 
 func (table *tableOfFiles) setErr(err error) {
@@ -55,6 +57,14 @@ func (table *tableOfFiles) fill() {
 
 	table.table.Clear()
 
+	title := fmt.Sprintf(" [violet]%s[-] (%%s) ", table.wd)
+	if table.remote {
+		title = fmt.Sprintf(title, "remote")
+	} else {
+		title = fmt.Sprintf(title, "local")
+	}
+	table.table.SetTitle(title)
+
 	table.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		key := event.Key()
 		r := event.Rune()
@@ -75,9 +85,13 @@ func (table *tableOfFiles) fill() {
 					abort(err)
 					return nil
 				}
-				table.files.Init(files, table.remote)
-				table.fill()
-				table.table.Select(1, 0)
+				table.wd = filepath.Clean(filepath.Join(table.wd, f.Name))
+				table.app.QueueUpdateDraw(func() {
+					table.files.Init(files, table.remote)
+					table.fill()
+					table.table.Select(1, 0)
+					table.table.SetOffset(0, 0)
+				})
 				return nil
 			}
 			if f.Mode.IsRegular() {
@@ -160,9 +174,13 @@ func (table *tableOfFiles) fill() {
 					abort(err)
 					return nil
 				}
-				table.files.Init(files, table.remote)
-				table.fill()
-				table.table.Select(1, 0)
+				table.wd = filepath.Clean(filepath.Join(table.wd, f.Name))
+				table.app.QueueUpdateDraw(func() {
+					table.files.Init(files, table.remote)
+					table.fill()
+					table.table.Select(1, 0)
+					table.table.SetOffset(0, 0)
+				})
 				return nil
 			}
 			if f.Mode.IsRegular() {
@@ -295,6 +313,7 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	table.callback = callback
 	table.readFile = readFile
 	table.remote = remote
+	table.wd = wd
 	files, err := callback(nil)
 	if err != nil {
 		return err
@@ -303,20 +322,12 @@ func TableOfFiles(wd string, callback SelectedCallback, readFile func(string) ([
 	table.files.Init(files, remote)
 
 	table.app = tview.NewApplication()
-	// TODO: table.app.SetInputCapture()
-	title := fmt.Sprintf(" [violet]%s[-] (%%s) ", wd)
-	if remote {
-		title = fmt.Sprintf(title, "remote")
-	} else {
-		title = fmt.Sprintf(title, "local")
-	}
 	table.table = tview.NewTable().SetBorders(false).SetFixed(1, 0)
 	table.pages = tview.NewPages()
 	table.pages.AddPage("table", table.table, true, true)
 	table.table.SetSelectable(true, false)
 	table.table.SetSelectedStyle(tcell.ColorRed, tcell.ColorDefault, tcell.AttrBold)
 	table.table.SetBorder(true).SetBorderPadding(1, 0, 1, 1)
-	table.table.SetTitle(title)
 	table.fill()
 	table.table.Select(1, 0)
 

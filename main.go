@@ -31,7 +31,18 @@ func main() {
 }
 
 func init() {
-	tview.Styles.PrimitiveBackgroundColor = tcell.ColorDarkSlateGrey
-	tview.Styles.ContrastBackgroundColor = tcell.ColorSlateGrey
-	tview.Styles.PrimaryTextColor = tcell.ColorWhite
+	tview.Styles = tview.Theme{
+		PrimitiveBackgroundColor:    tcell.ColorBlack,
+		ContrastBackgroundColor:     tcell.ColorDarkSlateGray,
+		MoreContrastBackgroundColor: tcell.ColorDarkCyan,
+		BorderColor:                 tcell.ColorLightYellow,
+		TitleColor:                  tcell.ColorViolet,
+		GraphicsColor:               tcell.ColorWhite,
+		PrimaryTextColor:            tcell.ColorFloralWhite,
+		SecondaryTextColor:          tcell.ColorLightBlue,
+		TertiaryTextColor:           tcell.ColorLightGreen,
+		InverseTextColor:            tcell.ColorBlue,
+		ContrastSecondaryTextColor:  tcell.ColorLightCoral,
+	}
+
 }

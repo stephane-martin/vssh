@@ -20,6 +20,7 @@ import (
 )
 
 func SocksCommand() cli.Command {
+	// TODO: support DNS on UDP
 	return cli.Command{
 		Name:   "socks",
 		Action: socksAction,
@@ -130,10 +131,12 @@ func socksAction(clictx *cli.Context) (e error) {
 	if err != nil {
 		return err
 	}
-	listener, err := net.Listen("tcp", clictx.String("socksaddr"))
+	socksAddr := clictx.String("socksaddr")
+	listener, err := net.Listen("tcp", socksAddr)
 	if err != nil {
 		return err
 	}
+	logger.Infow("SOCKS server listening", "addr", socksAddr)
 	go func() {
 		<-ctx.Done()
 		_ = listener.Close()
