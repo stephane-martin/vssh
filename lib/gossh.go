@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stephane-martin/vssh/params"
-	"github.com/stephane-martin/vssh/sys"
 	"os"
 	"strings"
+
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 
 	"github.com/awnumar/memguard"
 	gssh "github.com/stephane-martin/golang-ssh"

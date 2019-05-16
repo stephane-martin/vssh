@@ -3,18 +3,18 @@ package commands
 import (
 	"context"
 	"errors"
-	"github.com/stephane-martin/vssh/crypto"
-	"github.com/stephane-martin/vssh/params"
-	"github.com/stephane-martin/vssh/vault"
-	"github.com/stephane-martin/vssh/widgets"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
+	"github.com/stephane-martin/vssh/crypto"
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/vault"
+	"github.com/stephane-martin/vssh/widgets"
+
 	"github.com/stephane-martin/vssh/lib"
 	"github.com/urfave/cli"
-	"golang.org/x/crypto/ssh"
 )
 
 const (
@@ -98,20 +98,12 @@ func sshAction(clictx *cli.Context) (e error) {
 		return err
 	}
 
-	client, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
+	client, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, sshParams.UseAgent, logger)
 	if err != nil {
 		return err
 	}
 
-	var methods []ssh.AuthMethod
-	for _, credential := range credentials {
-		m, err := credential.AuthMethod()
-		if err == nil {
-			methods = append(methods, m)
-		} else {
-			logger.Errorw("failed to use credentials", "error", err)
-		}
-	}
+	methods := crypto.CredentialsToMethods(credentials, logger)
 	if len(methods) == 0 {
 		return errors.New("no usable credentials")
 	}

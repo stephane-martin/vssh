@@ -3,20 +3,20 @@ package commands
 import (
 	"context"
 	"errors"
+	"io/ioutil"
+	"net"
+	"strings"
+
 	"github.com/stephane-martin/vssh/crypto"
 	"github.com/stephane-martin/vssh/params"
 	"github.com/stephane-martin/vssh/remoteops"
 	"github.com/stephane-martin/vssh/sys"
-	"io/ioutil"
-	"net"
-	"strings"
 
 	"github.com/getlantern/go-socks5"
 	"github.com/getlantern/golog"
 	"github.com/getlantern/hidden"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"github.com/urfave/cli"
-	"golang.org/x/crypto/ssh"
 )
 
 func SocksCommand() cli.Command {
@@ -69,20 +69,11 @@ func socksAction(clictx *cli.Context) (e error) {
 		return err
 	}
 
-	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, sshParams.UseAgent, logger)
 	if err != nil {
 		return err
 	}
-
-	var methods []ssh.AuthMethod
-	for _, credential := range credentials {
-		m, err := credential.AuthMethod()
-		if err == nil {
-			methods = append(methods, m)
-		} else {
-			logger.Errorw("failed to use credentials", "error", err)
-		}
-	}
+	methods := crypto.CredentialsToMethods(credentials, logger)
 	if len(methods) == 0 {
 		return errors.New("no usable credentials")
 	}

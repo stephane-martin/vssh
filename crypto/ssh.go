@@ -3,6 +3,9 @@ package crypto
 import (
 	"context"
 	"errors"
+	"net"
+	"os"
+
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/vault/api"
 	"github.com/mitchellh/go-homedir"
@@ -11,7 +14,7 @@ import (
 	"github.com/stephane-martin/vssh/vault"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/ssh"
-	"os"
+	"golang.org/x/crypto/ssh/agent"
 )
 
 type SSHCredentials struct {
@@ -19,6 +22,7 @@ type SSHCredentials struct {
 	PublicKey   *PublicKey
 	Certificate *memguard.LockedBuffer
 	Password    *memguard.LockedBuffer
+	Agent       bool
 }
 
 func (c SSHCredentials) AuthMethod() (ssh.AuthMethod, error) {
@@ -47,10 +51,70 @@ func (c SSHCredentials) AuthMethod() (ssh.AuthMethod, error) {
 	if c.Password != nil {
 		return ssh.Password(string(c.Password.Buffer())), nil
 	}
+	if c.Agent {
+		agent, err := GetAgentAuth()
+		if err != nil {
+			return nil, err
+		}
+		return agent, nil
+	}
 	return nil, errors.New("no credentials")
 }
 
-func GetSSHCredentials(ctx context.Context, clictx params.CLIContext, loginName string, l *zap.SugaredLogger) (*api.Client, []SSHCredentials, error) {
+func GetAgentAuth() (ssh.AuthMethod, error) {
+	sock := os.Getenv("SSH_AUTH_SOCK")
+	if len(sock) == 0 {
+		return nil, errors.New("SSH_AUTH_SOCK is not set")
+	}
+	agconn, err := net.Dial("unix", sock)
+	if err != nil {
+		return nil, err
+	}
+	ag := agent.NewClient(agconn)
+	auth := ssh.PublicKeysCallback(ag.Signers)
+	return auth, nil
+}
+
+func CredentialsToMethods(credentials []SSHCredentials, logger *zap.SugaredLogger) (methods []ssh.AuthMethod) {
+	for _, credential := range credentials {
+		m, err := credential.AuthMethod()
+		if err == nil {
+			methods = append(methods, m)
+		} else {
+			logger.Errorw("failed to use credentials", "error", err)
+		}
+	}
+	return methods
+}
+
+func GetSSHCredentials(ctx context.Context, clictx params.CLIContext, loginName string, useAgent bool, l *zap.SugaredLogger) (*api.Client, []SSHCredentials, error) {
+	var credentials []SSHCredentials
+	var vaultClient *api.Client
+
+	vaultParams := vault.GetVaultParams(clictx)
+	if vaultParams.SSHMount != "" {
+		if vaultParams.SSHRole != "" {
+			client, err := vault.GetVaultClient(ctx, vaultParams, l)
+			if err == nil {
+				vaultClient = client
+			} else if err == context.Canceled {
+				return nil, nil, err
+			} else {
+				l.Errorw("vault auth failed", "error", err)
+			}
+
+		} else {
+			l.Infow("vault SSH role is not set")
+		}
+	} else {
+		l.Infow("vault SSH mount point is not set")
+	}
+
+	if useAgent {
+		l.Infow("enabled: auth by SSH agent")
+		return vaultClient, []SSHCredentials{{Agent: true}}, nil
+	}
+
 	privateKeyPath := clictx.PrivateKey()
 	if privateKeyPath == "" {
 		privateKeyPath = "~/.ssh/id_rsa"
@@ -87,26 +151,6 @@ func GetSSHCredentials(ctx context.Context, clictx params.CLIContext, loginName 
 		} else {
 			l.Infow("matching certificate not found for filesystem private key", "error", err)
 		}
-	}
-
-	var vaultClient *api.Client
-	vaultParams := vault.GetVaultParams(clictx)
-	if vaultParams.SSHMount != "" {
-		if vaultParams.SSHRole != "" {
-			client, err := vault.GetVaultClient(ctx, vaultParams, l)
-			if err == nil {
-				vaultClient = client
-			} else if err == context.Canceled {
-				return nil, nil, err
-			} else {
-				l.Errorw("vault auth failed", "error", err)
-			}
-
-		} else {
-			l.Infow("vault SSH role is not set")
-		}
-	} else {
-		l.Infow("vault SSH mount point is not set")
 	}
 
 	privateKeyVaultPath := clictx.VPrivateKey()
@@ -154,7 +198,6 @@ func GetSSHCredentials(ctx context.Context, clictx params.CLIContext, loginName 
 		}
 	}
 
-	var credentials []SSHCredentials
 	if certificatePKVault != nil {
 		credentials = append(credentials, SSHCredentials{
 			PrivateKey:  privkeyVault,
@@ -206,4 +249,3 @@ func GetSSHCredentials(ctx context.Context, clictx params.CLIContext, loginName 
 	}
 	return vaultClient, credentials, nil
 }
-

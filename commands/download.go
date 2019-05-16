@@ -134,20 +134,12 @@ func wrapGet(sftp bool) cli.ActionFunc {
 		if len(sources) == 0 {
 			var paths []entry
 
-			_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
+			_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, sshParams.UseAgent, logger)
 			if err != nil {
 				return err
 			}
 
-			var methods []ssh.AuthMethod
-			for _, credential := range credentials {
-				m, err := credential.AuthMethod()
-				if err == nil {
-					methods = append(methods, m)
-				} else {
-					logger.Errorw("failed to use credentials", "error", err)
-				}
-			}
+			methods := crypto.CredentialsToMethods(credentials, logger)
 			if len(methods) == 0 {
 				return errors.New("no usable credentials")
 			}
@@ -180,20 +172,11 @@ func wrapGet(sftp bool) cli.ActionFunc {
 			}
 		}
 
-		_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
+		_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, sshParams.UseAgent, logger)
 		if err != nil {
 			return err
 		}
-
-		var methods []ssh.AuthMethod
-		for _, credential := range credentials {
-			m, err := credential.AuthMethod()
-			if err == nil {
-				methods = append(methods, m)
-			} else {
-				logger.Errorw("failed to use credentials", "error", err)
-			}
-		}
+		methods := crypto.CredentialsToMethods(credentials, logger)
 		if len(methods) == 0 {
 			return errors.New("no usable credentials")
 		}

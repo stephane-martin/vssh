@@ -4,19 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"strings"
+
 	"github.com/stephane-martin/vssh/crypto"
 	"github.com/stephane-martin/vssh/params"
 	"github.com/stephane-martin/vssh/remoteops"
 	"github.com/stephane-martin/vssh/sys"
-	"net"
-	"net/http"
-	"strings"
 
 	"github.com/elazarl/goproxy"
 	gssh "github.com/stephane-martin/golang-ssh"
 	"github.com/urfave/cli"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/ssh"
 )
 
 func HTTPProxyCommand() cli.Command {
@@ -69,20 +69,11 @@ func httpProxyAction(clictx *cli.Context) (e error) {
 		return err
 	}
 
-	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, logger)
+	_, credentials, err := crypto.GetSSHCredentials(ctx, c, sshParams.LoginName, sshParams.UseAgent, logger)
 	if err != nil {
 		return err
 	}
-
-	var methods []ssh.AuthMethod
-	for _, credential := range credentials {
-		m, err := credential.AuthMethod()
-		if err == nil {
-			methods = append(methods, m)
-		} else {
-			logger.Errorw("failed to use credentials", "error", err)
-		}
-	}
+	methods := crypto.CredentialsToMethods(credentials, logger)
 	if len(methods) == 0 {
 		return errors.New("no usable credentials")
 	}

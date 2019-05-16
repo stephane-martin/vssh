@@ -3,9 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
+
 	"github.com/stephane-martin/vssh/commands"
 	"github.com/stephane-martin/vssh/widgets"
-	"io/ioutil"
 
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/urfave/cli"
@@ -166,7 +167,11 @@ func GlobalFlags() []cli.Flag {
 			Usage:  "enable SSH password authentication",
 			EnvVar: "VSSH_SSH_PASSWORD",
 		},
-
+		cli.BoolFlag{
+			Name:   "agent",
+			Usage:  "enable SSH agent authentication",
+			EnvVar: "VSSH_SSH_AGENT",
+		},
 		cli.StringFlag{
 			Name:  "loglevel",
 			Usage: "logging level",

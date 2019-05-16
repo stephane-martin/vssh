@@ -3,10 +3,11 @@ package widgets
 import (
 	"errors"
 	"fmt"
-	"github.com/stephane-martin/vssh/params"
 	"os/user"
 	"strconv"
 	"strings"
+
+	"github.com/stephane-martin/vssh/params"
 
 	"github.com/gdamore/tcell"
 	"github.com/mattn/go-shellwords"
@@ -99,6 +100,7 @@ func Form(c params.CLIContext, sshOptions bool) (params.CLIContext, error) {
 	ctx.sshPKeyField = addInputField("SSH private key path", pkeyPath, 40, nil)
 	ctx.sshVPKeyField = addInputField("SSH private key path in Vault", c.VPrivateKey(), 40, nil)
 	ctx.sshPasswordField = addCheckBox("Use SSH password", c.SSHPassword())
+	ctx.sshAgentField = addCheckBox("Use SSH agent", c.SSHAgent())
 	ctx.insecureField = addCheckBox("Do not check host key", c.SSHInsecure())
 	if sshOptions {
 		ctx.forceTerminalField = addCheckBox("Force pseudo-terminal", false)
@@ -170,6 +172,7 @@ type formContext struct {
 	sshPortField         *tview.InputField
 	sshLoginField        *tview.InputField
 	sshPasswordField     *tview.Checkbox
+	sshAgentField        *tview.Checkbox
 	sshPKeyField         *tview.InputField
 	sshVPKeyField        *tview.InputField
 	insecureField        *tview.Checkbox
@@ -257,6 +260,10 @@ func (ctx *formContext) SSHPort() int {
 
 func (ctx *formContext) SSHPassword() bool {
 	return ctx.sshPasswordField.IsChecked()
+}
+
+func (ctx *formContext) SSHAgent() bool {
+	return ctx.sshAgentField.IsChecked()
 }
 
 func (ctx *formContext) SSHInsecure() bool {
