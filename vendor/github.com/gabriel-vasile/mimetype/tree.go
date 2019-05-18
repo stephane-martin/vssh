@@ -36,7 +36,7 @@ var (
 	fits = newNode("application/fits", "fits", matchers.Fits)
 	ogg  = newNode("application/ogg", "ogg", matchers.Ogg)
 	txt  = newNode("text/plain", "txt", matchers.Txt,
-		html, svg, xml, php, js, lua, perl, python, json, rtf, tcl, csv, tsv)
+		html, svg, xml, php, js, lua, perl, python, json, rtf, tcl, csv, tsv, vCard)
 	xml = newNode("text/xml; charset=utf-8", "xml", matchers.Xml,
 		x3d, kml, collada, gml, gpx, tcx)
 	json      = newNode("application/json", "json", matchers.Json, geoJson)
@@ -51,6 +51,7 @@ var (
 	perl      = newNode("text/x-perl", "pl", matchers.Perl)
 	python    = newNode("application/x-python", "py", matchers.Python)
 	tcl       = newNode("text/x-tcl", "tcl", matchers.Tcl)
+	vCard     = newNode("text/vcard", "vcf", matchers.VCard)
 	svg       = newNode("image/svg+xml", "svg", matchers.Svg)
 	x3d       = newNode("model/x3d+xml", "x3d", matchers.X3d)
 	kml       = newNode("application/vnd.google-earth.kml+xml", "kml", matchers.Kml)
@@ -102,7 +103,8 @@ var (
 	elfExe    = newNode("application/x-executable", "", matchers.ElfExe)
 	elfLib    = newNode("application/x-sharedlib", "so", matchers.ElfLib)
 	elfDump   = newNode("application/x-coredump", "", matchers.ElfDump)
-	ar        = newNode("application/x-archive", "a", matchers.Ar)
+	ar        = newNode("application/x-archive", "a", matchers.Ar, deb)
+	deb       = newNode("application/vnd.debian.binary-package", "deb", matchers.Deb)
 	dcm       = newNode("application/dicom", "dcm", matchers.Dcm)
 	odt       = newNode("application/vnd.oasis.opendocument.text", "odt", matchers.Odt, ott)
 	ott       = newNode("application/vnd.oasis.opendocument.text-template", "ott", matchers.Ott)

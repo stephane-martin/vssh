@@ -29,12 +29,12 @@
   revision = "ddb85795713c2218601b44b94a5e105e5028ec42"
 
 [[projects]]
-  digest = "1:fd61cf4ae1953d55df708acb6b91492d538f49c305b364a014049914495db426"
+  digest = "1:04457f9f6f3ffc5fea48e71d62f2ca256637dee0a04d710288e27e05c8b41976"
   name = "github.com/Sirupsen/logrus"
   packages = ["."]
   pruneopts = "UT"
-  revision = "8bdbc7bcc01dcbb8ec23dc8a28e332258d25251f"
-  version = "v1.4.1"
+  revision = "839c75faf7f98a33d445d181f3018b5c3409a45e"
+  version = "v1.4.2"
 
 [[projects]]
   digest = "1:e2921241c77283579f383d04139a68aaca100668a26de5e1bc56d29d896ee304"
@@ -139,7 +139,7 @@
   revision = "9d40249d3c2f14d1a9d75e070a738362adeb5a83"
 
 [[projects]]
-  digest = "1:ecd18ec0a15f037195d296b362a8adef6131bb57ac84a92dc043ec74720e8943"
+  digest = "1:a6f38ca7c55d3100c52ad61ca761e4381a2b1411a42a5faec45ee807eab62c97"
   name = "github.com/gabriel-vasile/mimetype"
   packages = [
     ".",
@@ -147,8 +147,8 @@
     "internal/matchers",
   ]
   pruneopts = "UT"
-  revision = "31952ed4b4f94387676a3b1a50e85944be6e0a16"
-  version = "v0.3.7"
+  revision = "64cea0d2fa1534290b10b0e33c5ec6c5f825c465"
+  version = "v0.3.8"
 
 [[projects]]
   digest = "1:0e16b03c72bd42739ca68d055c10369e60d17838428f512f3b29ae115ba788e0"
@@ -520,19 +520,19 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:65d59a5b6a44b52bc2449479cc40de6da03398ef9c6323ea868c9ac752b9d441"
+  digest = "1:d6f89b777b56362ed4d5a4a4cb6e47524c7258788461cdb320cf2b0709dc0509"
   name = "github.com/rivo/tview"
   packages = ["."]
   pruneopts = "UT"
-  revision = "90b4da1bd64ceee13d2e7d782b315b819190f7bf"
+  revision = "bd836ef13b4b67d7486d71252ac83f81333234be"
 
 [[projects]]
   branch = "master"
-  digest = "1:ab2d8dae71aefc7057f8da6a765968d46cb4190aee8ba247c46afc129d45a3bf"
+  digest = "1:0f3d53c091b2688c1b1ba08ce4ae8076d63bc05fc1f6b3c0eb2df1f2e801fcdf"
   name = "github.com/rivo/uniseg"
   packages = ["."]
   pruneopts = "UT"
-  revision = "f699dde9c340bcc39b69a4c67369832af73ec72e"
+  revision = "b9f5b9457d44da7006ab06c7e3915583b6bcb0ab"
 
 [[projects]]
   digest = "1:6baa565fe16f8657cf93469b2b8a6c61a277827734400d27e44d589547297279"
@@ -649,11 +649,11 @@
     "ssh/terminal",
   ]
   pruneopts = "UT"
-  revision = "cbcb750295291b33242907a04be40e80801d0cfc"
+  revision = "22d7a77e9e5f409e934ed268692e56707cd169e5"
 
 [[projects]]
   branch = "master"
-  digest = "1:6cbffc0d92cf6d898cc13a10a062b6c7aab5af50bc62ba5fb10ca38c60215069"
+  digest = "1:4b8fa2fb91582bd5c3a8659fe886a2bac03d27cbe2c36e46a4e35ba9c5f3b94b"
   name = "golang.org/x/net"
   packages = [
     "bpf",
@@ -667,7 +667,7 @@
     "ipv6",
   ]
   pruneopts = "UT"
-  revision = "a4d6f7feada510cc50e69a37b484cb0fdc6b7876"
+  revision = "3ec19112720433827bbce8be9342797f5a6aaaf9"
 
 [[projects]]
   branch = "master"
@@ -679,7 +679,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:ed3d25dee9c9d77611e5ce1bd3a5a078930e8efb31afac120ccb1fbba7ec08d1"
+  digest = "1:8dfe1b520917d87d38e31224a3dbd78f969e8e850c63c857112d1c08c239b83d"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -687,7 +687,7 @@
     "windows",
   ]
   pruneopts = "UT"
-  revision = "a5b02f93d862f065920dd6a40dddc66b60d0dec4"
+  revision = "61b9204099cb1bebc803c9ffb9b2d3acd9d457d9"
 
 [[projects]]
   digest = "1:79c5cb4177013a706cb70478eedf23df5dc2469170b37e5b49c76cc854521701"
