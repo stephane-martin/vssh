@@ -21,10 +21,11 @@ func GoConnectAuth(ctx context.Context, sshParams params.SSHParams, terminal boo
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User: sshParams.LoginName,
-		Host: sshParams.Host,
-		Port: sshParams.Port,
-		Auth: auth,
+		User:      sshParams.LoginName,
+		Host:      sshParams.Host,
+		Port:      sshParams.Port,
+		Auth:      auth,
+		HTTPProxy: sshParams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(sshParams.Insecure, l)
 	if err != nil {

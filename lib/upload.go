@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/stephane-martin/vssh/params"
-	"github.com/stephane-martin/vssh/sys"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/sys"
 
 	"github.com/awnumar/memguard"
 	"github.com/stephane-martin/go-vis"
@@ -254,10 +255,11 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, gparam
 		remotePath = "."
 	}
 	cfg := gssh.Config{
-		User: gparams.LoginName,
-		Host: gparams.Host,
-		Port: gparams.Port,
-		Auth: auth,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
+		Auth:      auth,
+		HTTPProxy: sshParams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {

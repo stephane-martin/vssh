@@ -6,9 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/stephane-martin/vssh/params"
-	"github.com/stephane-martin/vssh/remoteops"
-	"github.com/stephane-martin/vssh/sys"
 	"io"
 	"io/ioutil"
 	"os"
@@ -16,6 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/stephane-martin/vssh/params"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
 
 	"github.com/awnumar/memguard"
 	"github.com/pkg/sftp"
@@ -189,10 +190,11 @@ func ScpGetAuth(ctx context.Context, srcs []string, gparams params.SSHParams, au
 		return errors.New("no auth method")
 	}
 	cfg := gssh.Config{
-		User: gparams.LoginName,
-		Host: gparams.Host,
-		Port: gparams.Port,
-		Auth: auth,
+		User:      gparams.LoginName,
+		Host:      gparams.Host,
+		Port:      gparams.Port,
+		Auth:      auth,
+		HTTPProxy: sshParams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
