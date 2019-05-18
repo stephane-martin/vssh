@@ -43,17 +43,121 @@ func (table *tableOfFiles) setErr(err error) {
 	table.errlock.Unlock()
 }
 
+func (table *tableOfFiles) chdir(f *SelectedFile) {
+	f.Action = OpenDir
+	files, err := table.callback(f)
+	if err != nil {
+		table.abort(err)
+		return
+	}
+	table.wd = filepath.Clean(filepath.Join(table.wd, f.Name))
+	table.refresh(files)
+}
+
+func (table *tableOfFiles) abort(err error) {
+	table.setErr(err)
+	table.app.Stop()
+}
+
+func (table *tableOfFiles) less(f *SelectedFile) {
+	content, err := table.readFile(f.Name)
+	if err != nil {
+		table.abort(err)
+		return
+	}
+	w, err := ShowFileInternalWidget(f.Name, content)
+	if err != nil {
+		table.abort(err)
+		return
+	}
+	w.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		key := ev.Key()
+		if key == tcell.KeyEnter {
+			return tcell.NewEventKey(tcell.KeyDown, 'j', tcell.ModNone)
+		}
+		if key == tcell.KeyESC || ev.Rune() == 'q' {
+			table.pages.RemovePage("less")
+		}
+		return ev
+	})
+	table.pages.AddPage("less", w, true, true)
+}
+
+func (table *tableOfFiles) edit(f *SelectedFile) {
+	f.Action = EditFile
+	var files []os.FileInfo
+	var err error
+	table.app.Suspend(func() {
+		files, err = table.callback(f)
+	})
+	if err != nil {
+		table.abort(err)
+		return
+	}
+	table.refresh(files)
+}
+
+func (table *tableOfFiles) open(f *SelectedFile) {
+	f.Action = OpenFile
+	_, err := table.callback(f)
+	if err != nil {
+		table.abort(err)
+	}
+}
+
+func (table *tableOfFiles) rmdir(f *SelectedFile) {
+	modal := tview.NewModal().
+		SetText(fmt.Sprintf("Do you want to delete the directory?\n[blue]%s[-]", f.Name)).
+		AddButtons([]string{"Delete", "Cancel"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			table.pages.RemovePage("confirmDelete")
+			if buttonLabel == "Delete" {
+				f.Action = DeleteDir
+				files, err := table.callback(f)
+				if err != nil {
+					table.abort(err)
+					return
+				}
+				table.refresh(files)
+			}
+		})
+	table.pages.AddPage("confirmDelete", modal, true, true)
+}
+
+func (table *tableOfFiles) rmfile(f *SelectedFile) {
+	modal := tview.NewModal().
+		SetText(fmt.Sprintf("Do you want to delete the file?\n[blue]%s[-]", f.Name)).
+		AddButtons([]string{"Delete", "Cancel"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			table.pages.RemovePage("confirmDelete")
+			if buttonLabel == "Delete" {
+				f.Action = DeleteFile
+				files, err := table.callback(f)
+				if err != nil {
+					table.abort(err)
+					return
+				}
+				table.refresh(files)
+			}
+		})
+	table.pages.AddPage("confirmDelete", modal, true, true)
+}
+
+func (table *tableOfFiles) refresh(files []os.FileInfo) {
+	table.app.QueueUpdateDraw(func() {
+		table.files.Init(files, table.remote)
+		table.fill()
+		table.table.Select(1, 0)
+		table.table.SetOffset(0, 0)
+	})
+}
+
 func (table *tableOfFiles) fill() {
 
 	maxNameLength := table.files.maxNameLength()
 	maxSizeLength := table.files.maxSizeLength()
 	maxUserLength := table.files.maxUserLength()
 	maxGroupLength := table.files.maxGroupLength()
-
-	abort := func(e error) {
-		table.setErr(e)
-		table.app.Stop()
-	}
 
 	table.table.Clear()
 
@@ -69,7 +173,7 @@ func (table *tableOfFiles) fill() {
 		key := event.Key()
 		r := event.Rune()
 		if r == 'q' || key == tcell.KeyEscape {
-			abort(nil)
+			table.abort(nil)
 			return nil
 		}
 		if key == tcell.KeyEnter {
@@ -79,59 +183,25 @@ func (table *tableOfFiles) fill() {
 				return nil
 			}
 			if f.IsDir {
-				f.Action = OpenDir
-				files, err := table.callback(f)
-				if err != nil {
-					abort(err)
-					return nil
-				}
-				table.wd = filepath.Clean(filepath.Join(table.wd, f.Name))
-				table.app.QueueUpdateDraw(func() {
-					table.files.Init(files, table.remote)
-					table.fill()
-					table.table.Select(1, 0)
-					table.table.SetOffset(0, 0)
-				})
+				table.chdir(f)
 				return nil
 			}
 			if f.Mode.IsRegular() {
-				content, err := table.readFile(f.Name)
-				if err != nil {
-					abort(err)
-					return nil
-				}
-				w, err := ShowFileInternalWidget(f.Name, content)
-				if err != nil {
-					abort(err)
-					return nil
-				}
-				w.SetInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
-					key := ev.Key()
-					if key == tcell.KeyEnter {
-						return tcell.NewEventKey(tcell.KeyDown, 'j', tcell.ModNone)
-					}
-					if key == tcell.KeyESC || ev.Rune() == 'q' {
-						table.pages.RemovePage("less")
-					}
-					return ev
-				})
-				table.pages.AddPage("less", w, true, true)
+				table.less(f)
 			}
 			return nil
 		}
 		if r == 's' {
-			abort(ErrSwitch)
+			table.abort(ErrSwitch)
 			return nil
 		}
 		if r == 'r' {
 			files, err := table.callback(nil)
 			if err != nil {
-				abort(err)
+				table.abort(err)
 				return nil
 			}
-			table.files.Init(files, table.remote)
-			table.fill()
-			table.table.Select(1, 0)
+			table.refresh(files)
 			return nil
 		}
 		if r == 'e' {
@@ -144,19 +214,7 @@ func (table *tableOfFiles) fill() {
 				return nil
 			}
 			if f.Mode.IsRegular() {
-				f.Action = EditFile
-				var files []os.FileInfo
-				var err error
-				table.app.Suspend(func() {
-					files, err = table.callback(f)
-				})
-				if err != nil {
-					abort(err)
-					return nil
-				}
-				table.files.Init(files, table.remote)
-				table.fill()
-				table.table.Select(1, 0)
+				table.edit(f)
 			}
 			return nil
 		}
@@ -168,28 +226,11 @@ func (table *tableOfFiles) fill() {
 				return nil
 			}
 			if f.IsDir {
-				f.Action = OpenDir
-				files, err := table.callback(f)
-				if err != nil {
-					abort(err)
-					return nil
-				}
-				table.wd = filepath.Clean(filepath.Join(table.wd, f.Name))
-				table.app.QueueUpdateDraw(func() {
-					table.files.Init(files, table.remote)
-					table.fill()
-					table.table.Select(1, 0)
-					table.table.SetOffset(0, 0)
-				})
+				table.chdir(f)
 				return nil
 			}
 			if f.Mode.IsRegular() {
-				f.Action = OpenFile
-				_, err := table.callback(f)
-				if err != nil {
-					abort(err)
-					return nil
-				}
+				table.open(f)
 			}
 			return nil
 		}
@@ -199,49 +240,15 @@ func (table *tableOfFiles) fill() {
 			if f == nil {
 				return nil
 			}
+			if f.Name == ".." {
+				return nil
+			}
 			if f.IsDir {
-				if f.Name == ".." {
-					return nil
-				}
-				modal := tview.NewModal().
-					SetText(fmt.Sprintf("Do you want to delete the directory?\n[blue]%s[-]", f.Name)).
-					AddButtons([]string{"Delete", "Cancel"}).
-					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-						table.pages.RemovePage("confirmDelete")
-						if buttonLabel == "Delete" {
-							f.Action = DeleteDir
-							files, err := table.callback(f)
-							if err != nil {
-								abort(err)
-								return
-							}
-							table.files.Init(files, table.remote)
-							table.fill()
-							table.table.Select(1, 0)
-						}
-					})
-				table.pages.AddPage("confirmDelete", modal, true, true)
+				table.rmdir(f)
 				return nil
 			}
 			if f.Mode.IsRegular() {
-				modal := tview.NewModal().
-					SetText(fmt.Sprintf("Do you want to delete the file?\n[blue]%s[-]", f.Name)).
-					AddButtons([]string{"Delete", "Cancel"}).
-					SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-						table.pages.RemovePage("confirmDelete")
-						if buttonLabel == "Delete" {
-							f.Action = DeleteFile
-							files, err := table.callback(f)
-							if err != nil {
-								abort(err)
-								return
-							}
-							table.files.Init(files, table.remote)
-							table.fill()
-							table.table.Select(1, 0)
-						}
-					})
-				table.pages.AddPage("confirmDelete", modal, true, true)
+				table.rmfile(f)
 			}
 			return nil
 		}

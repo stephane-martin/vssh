@@ -2,13 +2,6 @@ package sftpshell
 
 import (
 	"fmt"
-	cowsay "github.com/Code-Hex/Neo-cowsay"
-	"github.com/pkg/sftp"
-	"github.com/scylladb/go-set/strset"
-	"github.com/stephane-martin/vssh/format"
-	"github.com/stephane-martin/vssh/remoteops"
-	"github.com/stephane-martin/vssh/sys"
-	"github.com/stephane-martin/vssh/widgets"
 	"io"
 	"io/ioutil"
 	"os"
@@ -16,6 +9,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	cowsay "github.com/Code-Hex/Neo-cowsay"
+	"github.com/pkg/sftp"
+	"github.com/scylladb/go-set/strset"
+	"github.com/stephane-martin/vssh/format"
+	"github.com/stephane-martin/vssh/remoteops"
+	"github.com/stephane-martin/vssh/sys"
+	"github.com/stephane-martin/vssh/widgets"
 )
 
 func _ls(wd string, width int, args []string, flags *strset.Set, client *sftp.Client, out io.Writer) error {
@@ -302,7 +303,6 @@ func (s *ShellState) cowsay(args []string, flags *strset.Set) error {
 	fmt.Fprintln(s.out)
 	return nil
 }
-
 
 func _list(wd string, client *sftp.Client, flags *strset.Set, out io.Writer) error {
 	showHidden := flags.Has("a")
