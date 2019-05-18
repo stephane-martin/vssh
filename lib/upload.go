@@ -259,7 +259,7 @@ func ScpPutAuth(ctx context.Context, sources []Source, remotePath string, gparam
 		Host:      gparams.Host,
 		Port:      gparams.Port,
 		Auth:      auth,
-		HTTPProxy: sshParams.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {

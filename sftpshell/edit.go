@@ -3,15 +3,16 @@ package sftpshell
 import (
 	"bytes"
 	"fmt"
-	"github.com/scylladb/go-set/strset"
-	"github.com/stephane-martin/vssh/remoteops"
-	"golang.org/x/crypto/ssh/terminal"
 	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
+
+	"github.com/scylladb/go-set/strset"
+	"github.com/stephane-martin/vssh/remoteops"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 func (s *ShellState) edit(args []string, flags *strset.Set) error {
@@ -171,13 +172,12 @@ func (s *ShellState) edit(args []string, flags *strset.Set) error {
 	return nil
 }
 
-
 func (s *ShellState) ledit(args []string, flags *strset.Set) error {
 	state, err := terminal.GetState(syscall.Stdin)
 	if err != nil {
 		return err
 	}
-	defer terminal.Restore(syscall.Stdin, state)
+	defer func() { _ = terminal.Restore(syscall.Stdin, state) }()
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "vim"

@@ -194,7 +194,7 @@ func ScpGetAuth(ctx context.Context, srcs []string, gparams params.SSHParams, au
 		Host:      gparams.Host,
 		Port:      gparams.Port,
 		Auth:      auth,
-		HTTPProxy: sshParams.HTTPProxy,
+		HTTPProxy: gparams.HTTPProxy,
 	}
 	hkcb, err := gssh.MakeHostKeyCallback(gparams.Insecure, l)
 	if err != nil {
