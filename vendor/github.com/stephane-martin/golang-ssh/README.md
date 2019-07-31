@@ -39,16 +39,3 @@ func connect() error {
 }
 ```
 
-## Compile for Windows:
-
-If you get this error:
-
-> go: github.com/Sirupsen/logrus@v1.2.0: parsing go.mod: unexpected module path "github.com/sirupsen/logrus"
-
-when compile for Windows with `go mod`, see [this issue](https://github.com/golang/go/issues/26208)
-for some hints and there was a walkaround:
-
-    go mod init
-    go get github.com/docker/docker@v0.0.0-20180422163414-57142e89befe
-    GOOS=windows GOARCH=amd64 go build
-

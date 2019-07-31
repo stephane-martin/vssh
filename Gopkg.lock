@@ -85,7 +85,6 @@
   version = "v0.6.3"
 
 [[projects]]
-  branch = "master"
   digest = "1:0c798a20f60ce2175366326a7aac3743392460820f1a76e24b1a87d4aebc6041"
   name = "github.com/awnumar/memguard"
   packages = [
@@ -94,6 +93,7 @@
   ]
   pruneopts = "UT"
   revision = "3546eefb381216a1caf3242964cfe2666b7ead39"
+  version = "v0.15.1"
 
 [[projects]]
   digest = "1:d219400f09c151f0ada918bab650ef46f7ebdb1ff4fea923fdcb839481ec7ec1"
@@ -551,36 +551,36 @@
   version = "v1.0.2"
 
 [[projects]]
-  branch = "master"
-  digest = "1:91fb7bc85f0b6c1d14155b629116ce5444128fb570479f48d631cf0a4172f3a1"
+  digest = "1:a519c55602c283f64f6f33e457f9e8d44451b35d54be77b9818b930f6d0a7a12"
   name = "github.com/stephane-martin/go-mimeapps"
   packages = ["."]
   pruneopts = "UT"
-  revision = "06dd13a243e289b3ee153919869a2f9978dfa281"
+  revision = "0cf9d76bcc026e7b8f153428d02f10668dc4d43e"
+  version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:5eb88d3fa3392fc3b8b036bd18a2a7b6bbf89da41d8dd89f16b34b4e00dd6cf3"
+  digest = "1:f86abb5100534748ccc441e1b658adb36e6abf41e22a700c502d7fb3c2b7736b"
   name = "github.com/stephane-martin/go-vis"
   packages = ["."]
   pruneopts = "UT"
-  revision = "21a848b7a7621d1ab718662f1b1b41ce7f7b097f"
+  revision = "db71104adf411898e9f097227b40a542f1de7f39"
+  version = "v0.1.0"
 
 [[projects]]
-  digest = "1:de2fa99c62d3e51fe71d1a5c50f16936def05c0d05ab96d944aef7ea7af733d2"
+  digest = "1:14fc2924bcbfa6a3c7de9a5140a01b42397cca8672ab298e35dafd34061c27bd"
   name = "github.com/stephane-martin/golang-ssh"
   packages = ["."]
   pruneopts = "UT"
-  revision = "05b0b56936d476b0f7c2025abf4f5bb5e97dd647"
-  version = "v0.7.2"
+  revision = "8de8aaa4ad2d68b2b903faff82ee606b3fdfbdaf"
+  version = "v0.7.3"
 
 [[projects]]
   digest = "1:ab93e2cd3289b7ba468d925f6f21ad06d8faf149e8bcc339fb73386a749ea999"
   name = "github.com/stephane-martin/vault-exec"
   packages = ["lib"]
   pruneopts = "UT"
-  revision = "fedf77411056564093121718117f18e850c42f81"
-  version = "v0.2.1"
+  revision = "4a8b558011ec095e4ffe667ca8c07a3a879ea9de"
+  version = "v0.2.2"
 
 [[projects]]
   digest = "1:b24d38b282bacf9791408a080f606370efa3d364e4b5fd9ba0f7b87786d3b679"

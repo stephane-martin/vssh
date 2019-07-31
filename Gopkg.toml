@@ -1,6 +1,6 @@
 [[constraint]]
   name = "github.com/stephane-martin/vault-exec"
-  version = "0.2.1"
+  version = "0.2.2"
 
 [[constraint]]
   name = "github.com/urfave/cli"
@@ -16,12 +16,11 @@
 
 [[constraint]]
   name = "github.com/stephane-martin/golang-ssh"
-  version = "0.7.2"
+  version = "0.7.3"
 
 [[constraint]]
   name = "github.com/awnumar/memguard"
-  #version = "0.15.0"
-  branch = "master"
+  version = "0.15.1"
 
 [[constraint]]
   name = "github.com/valyala/fastjson"
@@ -29,7 +28,7 @@
 
 [[constraint]]
   name = "github.com/stephane-martin/go-vis"
-  branch = "master"
+  version = "0.1.0"
 
 [[constraint]]
   name = "github.com/ktr0731/go-fuzzyfinder"
@@ -77,7 +76,7 @@
 
 [[constraint]]
   name = "github.com/stephane-martin/go-mimeapps"
-  branch = "master"
+  version = "0.1.0"
 
 [[constraint]]
   name = "golang.org/x/sync"
