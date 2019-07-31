@@ -17,7 +17,6 @@ import (
 	"github.com/awnumar/memguard"
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/hashicorp/vault/api"
-	"github.com/hashicorp/vault/helper/consts"
 	"github.com/valyala/fastjson"
 )
 
@@ -53,7 +52,7 @@ func Sign(ctx context.Context, pub *PublicKey, login, sshMount, sshRole string, 
 		Host:          u.Host,
 		Header:        make(http.Header),
 	}
-	r.Header.Set(consts.AuthHeaderName, clt.Token())
+	r.Header.Set("X-Vault-Token", clt.Token())
 	resp, err := cleanhttp.DefaultClient().Do(r.WithContext(ctx))
 	if err != nil {
 		return nil, err
