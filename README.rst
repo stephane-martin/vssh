@@ -1,7 +1,7 @@
 ====
 vssh
 ====
-:Author: Stephane Martin
+:Author: Stéphane Martin
 
 .. contents::
    :depth: 1
